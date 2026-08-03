@@ -73,7 +73,7 @@
         <label>账号<input name="username" autocomplete="username" required /></label>
         <label>密码<input name="password" type="password" autocomplete="current-password" required /></label>
         <div class="cloud-login-error" role="alert"></div>
-        <button type="submit">登录</button>
+        <button type="submit" disabled>登录</button>
       </form>`;
     const style = document.createElement("style");
     style.textContent = `
@@ -97,18 +97,11 @@
     const form = overlay.querySelector("form");
     const error = overlay.querySelector(".cloud-login-error");
     const button = overlay.querySelector("button");
-    let manifest;
-    try {
-      const response = await nativeFetch("./encrypted-data.json", { cache: "no-store" });
-      manifest = await response.json();
-    } catch {
-      error.textContent = "云端数据暂时无法读取";
-      button.disabled = true;
-      return;
-    }
+    let manifest = null;
 
     form.addEventListener("submit", async event => {
       event.preventDefault();
+      if (!manifest) return;
       error.textContent = "";
       button.disabled = true;
       const username = form.elements.username.value.trim();
@@ -127,6 +120,14 @@
         form.elements.password.select();
       }
     });
+
+    try {
+      const response = await nativeFetch("./encrypted-data.json", { cache: "no-store" });
+      manifest = await response.json();
+      button.disabled = false;
+    } catch {
+      error.textContent = "云端数据暂时无法读取";
+    }
   }
 
   start();
