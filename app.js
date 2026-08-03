@@ -1,4 +1,7 @@
 const DATE_KEY = "order-performance-dashboard-date-v2";
+const STAFF_ROSTER = [
+  { department: "乐源二部", name: "储玉岳" },
+];
 
 const elements = {
   date: document.querySelector("#reportDate"),
@@ -79,6 +82,26 @@ let publicViewOnly = false;
 
 function targetsEditable() {
   return !publicViewOnly || Boolean(window.STATIC_ARCHIVE_MODE && window.STATIC_USER_ROLE === "admin");
+}
+
+function staffWithRoster(staff) {
+  const rows = [...staff];
+  const names = new Set(rows.map(person => person.name));
+  STAFF_ROSTER.forEach(person => {
+    if (names.has(person.name)) return;
+    rows.push({
+      name: person.name,
+      department: person.department,
+      orders: new Set(),
+      orderCount: 0,
+      productCount: 0,
+      gross: 0,
+      refund: 0,
+      net: 0,
+      products: new Map(),
+    });
+  });
+  return rows.sort((left, right) => right.net - left.net || right.orderCount - left.orderCount || left.name.localeCompare(right.name, "zh-CN"));
 }
 
 const demoData = [];
@@ -383,7 +406,7 @@ function render() {
         const state = stats.maximum > 0 && quantity === stats.maximum ? " product-leader" : quantity < stats.average ? " product-below" : "";
         return `<td class="number matrix-product-value${state}" title="${escapeHtml(product.name)}：${quantity} 件；人员均值 ${plainNumber(stats.average, 1)} 件">${quantity}</td>`;
       }).join("");
-      const productDetails = [...person.products.entries()].sort((a, b) => b[1].net - a[1].net).map(([name, data]) => `<div class="staff-product-item"><strong>${escapeHtml(name)}</strong><span>${data.quantity} 件 · 产品净值 ${currency(data.net)}</span></div>`).join("");
+      const productDetails = [...person.products.entries()].sort((a, b) => b[1].net - a[1].net).map(([name, data]) => `<div class="staff-product-item"><strong>${escapeHtml(name)}</strong><span>${data.quantity} 件 · 产品净值 ${currency(data.net)}</span></div>`).join("") || '<div class="staff-product-item"><strong>暂无产品业绩</strong><span>当前完整月业绩为 0</span></div>';
       return `<tr><td class="matrix-fixed matrix-department">${escapeHtml(person.department)}</td><td class="matrix-fixed matrix-name"><button class="matrix-person-button" type="button" data-staff-toggle="${escapeHtml(person.name)}" aria-expanded="false" title="打开${escapeHtml(person.name)}的产品业绩明细"><span class="matrix-toggle-icon" aria-hidden="true">＋</span><strong>${escapeHtml(person.name)}</strong></button></td>${productCells}</tr><tr class="staff-matrix-detail" data-staff-detail="${escapeHtml(person.name)}" hidden><td colspan="${productColumns.length + 2}"><div class="staff-product-list">${productDetails}</div></td></tr>`;
     }).join("");
     const averages = productColumns.map(product => `<td class="number matrix-average-value">${plainNumber(productStats.get(product.name).average, 1)}</td>`).join("");
@@ -555,6 +578,7 @@ async function loadMonthlyReport() {
     monthlyTargets = targets;
     const records = archives.flatMap(archive => archive.records || []);
     monthlyReport = buildReportForWindow(records, monthWindow(month));
+    monthlyReport.staff = staffWithRoster(monthlyReport.staff);
     monthlyReport.month = month;
     monthlyReport.archiveCount = archives.length;
     renderMonthly();
@@ -676,6 +700,7 @@ async function loadPhaseReport() {
       report: buildReportForWindow(archive.records || [], archive.window || reportWindow(archive.date)),
     }));
     const combined = buildReportForWindow(archives.flatMap(archive => archive.records || []), monthWindow(month));
+    combined.staff = staffWithRoster(combined.staff);
     phaseReport = { month, days: reportingDays(month), archiveReports, combined };
     renderPhaseReport();
   } catch (error) { showToast(`阶段报表加载失败：${error.message}`); }
@@ -872,7 +897,7 @@ function renderPhaseReport() {
     const daily = days.map(day => {
       const dayPerson = reportsByDate.get(day.date)?.staff.find(item => item.name === person.name);
       const dayReport = reportsByDate.get(day.date);
-      return dayPerson ? `<td class="number phase-daily-value">${performanceBreakdown(dayPerson.net, dayReport.orders.filter(order => order.waiterName === person.name), dayPerson.orders, `${person.name} · ${day.date} 净业绩`)}</td><td class="number phase-daily-order">${dayPerson.orderCount}</td>` : '<td class="number phase-daily-value"></td><td class="number phase-daily-order"></td>';
+      return dayPerson ? `<td class="number phase-daily-value">${performanceBreakdown(dayPerson.net, dayReport.orders.filter(order => order.waiterName === person.name), dayPerson.orders, `${person.name} · ${day.date} 净业绩`)}</td><td class="number phase-daily-order">${dayPerson.orderCount}</td>` : '<td class="number phase-daily-value">0</td><td class="number phase-daily-order">0</td>';
     }).join("");
     return `<tr>${fixed}${daily}</tr>`;
   }).join("");
@@ -886,7 +911,7 @@ function renderPhaseReport() {
   const fixedTotal = ["", "汇总", teamTarget ? plainNumber(teamTarget) : "-", teamTarget ? plainNumber(totalDailyTarget) : "-", performanceBreakdown(combined.totals.net, combined.orders, new Set(combined.orders.filter(order => order.countAsOrder).map(order => order.orderNumber)), `${month} · 团队整月净业绩`), teamTarget ? plainNumber(totalRemaining) : "-", totalCompletion, totalOrders, totalOrders ? plainNumber(combined.totals.net / totalOrders) : "-"].map((value, index) => fixedCell(value, index + 1, "td", index >= 2 ? "number" : "")).join("");
   const dailyTotals = days.map(day => {
     const report = reportsByDate.get(day.date);
-    return report ? `<td class="number">${performanceBreakdown(report.totals.net, report.orders, new Set(report.orders.filter(order => order.countAsOrder).map(order => order.orderNumber)), `${day.date} · 团队净业绩`)}</td><td class="number">${report.orderCount}</td>` : '<td></td><td></td>';
+    return report ? `<td class="number">${performanceBreakdown(report.totals.net, report.orders, new Set(report.orders.filter(order => order.countAsOrder).map(order => order.orderNumber)), `${day.date} · 团队净业绩`)}</td><td class="number">${report.orderCount}</td>` : '<td class="number">0</td><td class="number">0</td>';
   }).join("");
   elements.phaseTableFoot.innerHTML = `<tr>${fixedTotal}${dailyTotals}</tr>`;
 }
