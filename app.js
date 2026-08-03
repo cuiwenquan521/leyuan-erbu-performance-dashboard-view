@@ -77,6 +77,10 @@ let toastTimer;
 let lastObservedAutoSync = "";
 let publicViewOnly = false;
 
+function targetsEditable() {
+  return !publicViewOnly || Boolean(window.STATIC_ARCHIVE_MODE && window.STATIC_USER_ROLE === "admin");
+}
+
 const demoData = [];
 
 function localDateString(date = new Date()) {
@@ -416,18 +420,27 @@ function setConnection(connected) {
 
 function setPublicViewOnly(enabled) {
   publicViewOnly = Boolean(enabled);
+  const canEditTargets = targetsEditable();
   document.body.classList.toggle("public-view-only", publicViewOnly);
-  [elements.connect, elements.refresh, elements.saveTargets, elements.savePhaseSettings].forEach(control => {
+  document.body.classList.toggle("cloud-targets-editable", publicViewOnly && canEditTargets);
+  [elements.connect, elements.refresh, elements.savePhaseSettings].forEach(control => {
     if (control) control.hidden = publicViewOnly;
   });
-  document.querySelectorAll(".target-input, #teamTarget, #firstDayStart, #cutoffTime").forEach(input => {
+  if (elements.saveTargets) elements.saveTargets.hidden = publicViewOnly && !canEditTargets;
+  if (elements.teamTarget) elements.teamTarget.disabled = !canEditTargets;
+  document.querySelectorAll(".target-input").forEach(input => {
+    input.disabled = !canEditTargets;
+  });
+  document.querySelectorAll("#firstDayStart, #cutoffTime").forEach(input => {
     input.disabled = publicViewOnly;
   });
   if (publicViewOnly) {
     elements.notice.classList.add("connected");
     elements.noticeTitle.textContent = window.STATIC_ARCHIVE_MODE ? "云端加密存档" : "公网只读查看";
     elements.noticeText.textContent = window.STATIC_ARCHIVE_MODE
-      ? "点击右上角“实时刷新”可检查并载入最新发布的 ERP 加密存档。"
+      ? canEditTargets
+        ? "点击右上角“实时刷新”可载入最新 ERP 存档；月度目标可在当前浏览器填写保存。"
+        : "点击右上角“实时刷新”可检查并载入最新发布的 ERP 加密存档。"
       : "数据由本机 ERP 只读服务同步，当前链接不能连接、刷新或修改数据。";
   }
 }
@@ -564,7 +577,7 @@ function renderMonthly() {
   elements.monthlyTargetBody.innerHTML = report.staff.map(person => {
     const target = amount(monthlyTargets.staffTargets?.[person.name]);
     const completion = target ? person.net / target : null;
-    return `<tr><td><div class="staff-cell"><span class="avatar">${escapeHtml(person.name.slice(0, 1))}</span>${escapeHtml(person.name)}</div></td><td>${escapeHtml(person.department)}</td><td class="number">${person.orderCount}</td><td class="number net-amount">${currency(person.net)}</td><td class="number"><input class="target-input" type="number" min="0" step="1000" data-target-staff="${escapeHtml(person.name)}" value="${target || ""}" placeholder="未设置" ${publicViewOnly ? "disabled" : ""} /></td><td class="number completion-value">${completion === null ? "未设置" : percent(completion)}</td></tr>`;
+    return `<tr><td><div class="staff-cell"><span class="avatar">${escapeHtml(person.name.slice(0, 1))}</span>${escapeHtml(person.name)}</div></td><td>${escapeHtml(person.department)}</td><td class="number">${person.orderCount}</td><td class="number net-amount">${currency(person.net)}</td><td class="number target-cell"><input class="target-input" type="number" min="0" step="1000" data-target-staff="${escapeHtml(person.name)}" value="${target || ""}" placeholder="未设置" ${targetsEditable() ? "" : "disabled"} /></td><td class="number completion-value">${completion === null ? "未设置" : percent(completion)}</td></tr>`;
   }).join("");
   renderMonthlyRanking();
 }
