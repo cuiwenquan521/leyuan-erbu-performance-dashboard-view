@@ -727,6 +727,116 @@ function fixedCell(content, index, tag = "td", extraClass = "", attributes = "")
   return `<${tag} class="phase-fixed phase-fixed-${index} ${extraClass}" ${attributes}>${content}</${tag}>`;
 }
 
+function groupedPerformanceOrders(orders, countedOrders = new Set()) {
+  const grouped = new Map();
+  orders.forEach(order => {
+    const key = order.orderNumber || "未识别订单";
+    const item = grouped.get(key) || {
+      orderNumber: key,
+      gross: 0,
+      refund: 0,
+      net: 0,
+      products: new Set(),
+      counted: countedOrders.has(key),
+    };
+    item.gross += order.gross;
+    item.refund += order.refund;
+    item.net += order.gross - order.refund;
+    order.products.forEach(product => item.products.add(product.name));
+    item.counted ||= countedOrders.has(key);
+    grouped.set(key, item);
+  });
+  return [...grouped.values()].map(item => ({
+    ...item,
+    products: [...item.products],
+  })).sort((left, right) => right.net - left.net || left.orderNumber.localeCompare(right.orderNumber));
+}
+
+function performanceBreakdown(value, orders, countedOrders, label) {
+  const rows = groupedPerformanceOrders(orders, countedOrders);
+  const detail = encodeURIComponent(JSON.stringify({
+    label,
+    total: amount(value),
+    countedOrders: countedOrders.size,
+    rows,
+  }));
+  return `<button type="button" class="performance-breakdown-trigger" data-performance-breakdown="${detail}" aria-label="查看${escapeHtml(label)}的订单明细"><span>${plainNumber(value)}</span><span class="performance-info" aria-hidden="true">i</span></button>`;
+}
+
+let performanceTooltip = null;
+let performanceTooltipTimer = null;
+
+function ensurePerformanceTooltip() {
+  if (performanceTooltip) return performanceTooltip;
+  performanceTooltip = document.createElement("section");
+  performanceTooltip.className = "performance-tooltip";
+  performanceTooltip.hidden = true;
+  performanceTooltip.addEventListener("mouseenter", () => clearTimeout(performanceTooltipTimer));
+  performanceTooltip.addEventListener("mouseleave", hidePerformanceTooltipSoon);
+  document.body.appendChild(performanceTooltip);
+  return performanceTooltip;
+}
+
+function hidePerformanceTooltipSoon() {
+  clearTimeout(performanceTooltipTimer);
+  performanceTooltipTimer = setTimeout(() => {
+    if (performanceTooltip) performanceTooltip.hidden = true;
+  }, 140);
+}
+
+function showPerformanceTooltip(trigger) {
+  clearTimeout(performanceTooltipTimer);
+  let detail;
+  try { detail = JSON.parse(decodeURIComponent(trigger.dataset.performanceBreakdown)); }
+  catch { return; }
+  const tooltip = ensurePerformanceTooltip();
+  const rows = detail.rows || [];
+  tooltip.innerHTML = `
+    <div class="performance-tooltip-heading">
+      <div><strong>${escapeHtml(detail.label)}</strong><span>相同订单编号已合并</span></div>
+      <b>${escapeHtml(currency(detail.total))}</b>
+    </div>
+    <div class="performance-tooltip-summary">共 ${rows.length} 个业绩订单编号，其中 ${detail.countedOrders} 个计入表格单量</div>
+    <div class="performance-tooltip-table">
+      <div class="performance-tooltip-row performance-tooltip-head"><span>订单编号</span><span>产品</span><span>业绩</span><span>退款</span><span>净业绩</span></div>
+      ${rows.map(row => `<div class="performance-tooltip-row"><span class="performance-order-number">${escapeHtml(row.orderNumber)}${row.counted ? '<em>计单</em>' : '<em class="adjustment">调整</em>'}</span><span title="${escapeHtml(row.products.join("、"))}">${escapeHtml(row.products.join("、") || "未识别产品")}</span><span>${escapeHtml(currency(row.gross))}</span><span class="refund-amount">${escapeHtml(currency(row.refund))}</span><span class="net-amount">${escapeHtml(currency(row.net))}</span></div>`).join("") || '<div class="performance-tooltip-empty">该单元格暂无订单流水</div>'}
+    </div>`;
+  tooltip.hidden = false;
+  const rect = trigger.getBoundingClientRect();
+  const tooltipRect = tooltip.getBoundingClientRect();
+  const left = Math.min(Math.max(10, rect.right - tooltipRect.width), window.innerWidth - tooltipRect.width - 10);
+  const below = rect.bottom + 8;
+  const top = below + tooltipRect.height <= window.innerHeight - 10 ? below : Math.max(10, rect.top - tooltipRect.height - 8);
+  tooltip.style.left = `${left}px`;
+  tooltip.style.top = `${top}px`;
+}
+
+document.addEventListener("mouseover", event => {
+  const trigger = event.target.closest?.(".performance-breakdown-trigger");
+  if (trigger && !trigger.contains(event.relatedTarget)) showPerformanceTooltip(trigger);
+});
+document.addEventListener("mouseout", event => {
+  const trigger = event.target.closest?.(".performance-breakdown-trigger");
+  if (trigger && !trigger.contains(event.relatedTarget)) hidePerformanceTooltipSoon();
+});
+document.addEventListener("focusin", event => {
+  const trigger = event.target.closest?.(".performance-breakdown-trigger");
+  if (trigger) showPerformanceTooltip(trigger);
+});
+document.addEventListener("focusout", event => {
+  if (event.target.closest?.(".performance-breakdown-trigger")) hidePerformanceTooltipSoon();
+});
+document.addEventListener("click", event => {
+  const trigger = event.target.closest?.(".performance-breakdown-trigger");
+  if (trigger) {
+    event.preventDefault();
+    showPerformanceTooltip(trigger);
+  } else if (performanceTooltip && !performanceTooltip.contains(event.target)) {
+    performanceTooltip.hidden = true;
+  }
+});
+window.addEventListener("resize", () => { if (performanceTooltip) performanceTooltip.hidden = true; });
+
 function renderPhaseReport() {
   if (!phaseReport) return;
   const { month, days, archiveReports, combined } = phaseReport;
@@ -753,7 +863,7 @@ function renderPhaseReport() {
       `<strong>${escapeHtml(person.name)}</strong>`,
       target ? plainNumber(target) : "未设置",
       target ? plainNumber(dailyTarget) : "-",
-      `<strong class="net-amount">${plainNumber(person.net)}</strong>`,
+      `<strong class="net-amount">${performanceBreakdown(person.net, combined.orders.filter(order => order.waiterName === person.name), person.orders, `${person.name} · 整月净业绩`)}</strong>`,
       target ? plainNumber(remaining) : "-",
       completion === null ? "-" : percent(completion),
       person.orderCount,
@@ -761,7 +871,8 @@ function renderPhaseReport() {
     ].map((value, index) => fixedCell(value, index + 1, "td", index >= 2 ? "number" : "" )).join("");
     const daily = days.map(day => {
       const dayPerson = reportsByDate.get(day.date)?.staff.find(item => item.name === person.name);
-      return dayPerson ? `<td class="number phase-daily-value">${plainNumber(dayPerson.net)}</td><td class="number phase-daily-order">${dayPerson.orderCount}</td>` : '<td class="number phase-daily-value"></td><td class="number phase-daily-order"></td>';
+      const dayReport = reportsByDate.get(day.date);
+      return dayPerson ? `<td class="number phase-daily-value">${performanceBreakdown(dayPerson.net, dayReport.orders.filter(order => order.waiterName === person.name), dayPerson.orders, `${person.name} · ${day.date} 净业绩`)}</td><td class="number phase-daily-order">${dayPerson.orderCount}</td>` : '<td class="number phase-daily-value"></td><td class="number phase-daily-order"></td>';
     }).join("");
     return `<tr>${fixed}${daily}</tr>`;
   }).join("");
@@ -772,10 +883,10 @@ function renderPhaseReport() {
   const totalRemaining = Math.max(0, teamTarget - combined.totals.net);
   const totalCompletion = teamTarget ? percent(combined.totals.net / teamTarget) : "-";
   const totalOrders = combined.orderCount;
-  const fixedTotal = ["", "汇总", teamTarget ? plainNumber(teamTarget) : "-", teamTarget ? plainNumber(totalDailyTarget) : "-", plainNumber(combined.totals.net), teamTarget ? plainNumber(totalRemaining) : "-", totalCompletion, totalOrders, totalOrders ? plainNumber(combined.totals.net / totalOrders) : "-"].map((value, index) => fixedCell(value, index + 1, "td", index >= 2 ? "number" : "")).join("");
+  const fixedTotal = ["", "汇总", teamTarget ? plainNumber(teamTarget) : "-", teamTarget ? plainNumber(totalDailyTarget) : "-", performanceBreakdown(combined.totals.net, combined.orders, new Set(combined.orders.filter(order => order.countAsOrder).map(order => order.orderNumber)), `${month} · 团队整月净业绩`), teamTarget ? plainNumber(totalRemaining) : "-", totalCompletion, totalOrders, totalOrders ? plainNumber(combined.totals.net / totalOrders) : "-"].map((value, index) => fixedCell(value, index + 1, "td", index >= 2 ? "number" : "")).join("");
   const dailyTotals = days.map(day => {
     const report = reportsByDate.get(day.date);
-    return report ? `<td class="number">${plainNumber(report.totals.net)}</td><td class="number">${report.orderCount}</td>` : '<td></td><td></td>';
+    return report ? `<td class="number">${performanceBreakdown(report.totals.net, report.orders, new Set(report.orders.filter(order => order.countAsOrder).map(order => order.orderNumber)), `${day.date} · 团队净业绩`)}</td><td class="number">${report.orderCount}</td>` : '<td></td><td></td>';
   }).join("");
   elements.phaseTableFoot.innerHTML = `<tr>${fixedTotal}${dailyTotals}</tr>`;
 }
