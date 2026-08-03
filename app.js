@@ -83,7 +83,22 @@ function localDateString(date = new Date()) {
   return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, "0"), String(date.getDate()).padStart(2, "0")].join("-");
 }
 
+function normalizeDateValue(value) {
+  const raw = String(value || "").trim();
+  const match = raw.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:[T\s].*)?$/)
+    || raw.match(/^(\d{4})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日?$/)
+    || raw.match(/^(\d{4})(\d{2})(\d{2})$/);
+  if (!match) return "";
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const selected = new Date(year, month - 1, day, 12);
+  if (selected.getFullYear() !== year || selected.getMonth() !== month - 1 || selected.getDate() !== day) return "";
+  return localDateString(selected);
+}
+
 function reportWindow(dateString) {
+  dateString = normalizeDateValue(dateString) || localDateString();
   const selected = new Date(`${dateString}T12:00:00`);
   const end = `${dateString} ${reportSettings.cutoffTime}:00`;
   const monthStart = new Date(selected.getFullYear(), selected.getMonth(), 1, 12);
@@ -98,8 +113,9 @@ function reportWindow(dateString) {
 }
 
 function normalizeReportingDate(dateString) {
-  const selected = new Date(`${dateString}T12:00:00`);
-  if (selected.getDay() !== 0) return dateString;
+  const normalized = normalizeDateValue(dateString) || localDateString();
+  const selected = new Date(`${normalized}T12:00:00`);
+  if (selected.getDay() !== 0) return normalized;
   selected.setDate(selected.getDate() + 1);
   return localDateString(selected);
 }
@@ -178,6 +194,8 @@ function normalizeRecord(record, index) {
   const centGross = firstValue(record, ["orderSellerReceivable", "promotePerformance", "orderPayAmount"]);
   const directRefund = firstValue(record, ["refundAmount", "退款金额"]);
   const centRefund = firstValue(record, ["orderRefundAmount"]);
+  const gross = directGross !== undefined ? amount(directGross) : cents(centGross);
+  const refund = directRefund !== undefined ? amount(directRefund) : cents(centRefund);
   return {
     recordId: String(firstValue(record, ["recordId", "performanceFlowId", "flowId"]) || firstValue(record, ["orderNumber", "orderId"]) || `ROW-${index + 1}`),
     orderNumber: String(firstValue(record, ["orderNumber", "orderId", "订单号", "订单编号"]) || `ROW-${index + 1}`),
@@ -185,9 +203,10 @@ function normalizeRecord(record, index) {
     waiterName: String(firstValue(record, ["waiterName", "serviceName", "服务人员", "服务人员姓名"]) || "未填写"),
     department: String(firstValue(record, ["waiterDepartment", "departmentName", "部门"]) || "未分配部门"),
     products: normalizeProducts(firstValue(record, ["orderProducts", "products", "订单产品", "产品"])),
-    gross: directGross !== undefined ? amount(directGross) : cents(centGross),
-    refund: directRefund !== undefined ? amount(directRefund) : cents(centRefund),
-    countAsOrder: record.countAsOrder !== false,
+    gross,
+    refund,
+    performanceType: Number(record.performanceType || 0),
+    countAsOrder: record.countAsOrder !== false && refund <= 0,
   };
 }
 
@@ -221,15 +240,31 @@ function buildReportForWindow(records, window) {
   const orders = prepareOrders(records, window);
   const people = new Map();
   const products = new Map();
-  const businessOrders = new Set();
+  const orderGroups = new Map();
   let estimatedProducts = false;
+
+  orders.filter(order => order.countAsOrder).forEach(order => {
+    if (!orderGroups.has(order.orderNumber)) orderGroups.set(order.orderNumber, []);
+    orderGroups.get(order.orderNumber).push(order);
+  });
+  const orderOwners = new Map([...orderGroups].map(([orderNumber, candidates]) => {
+    const ranked = [...candidates].sort((left, right) => {
+      const leftPriority = left.performanceType === 1 ? 0 : left.gross > 0 ? 1 : 2;
+      const rightPriority = right.performanceType === 1 ? 0 : right.gross > 0 ? 1 : 2;
+      return leftPriority - rightPriority || right.gross - left.gross || left.orderTime.localeCompare(right.orderTime) || left.waiterName.localeCompare(right.waiterName, "zh-CN");
+    });
+    return [orderNumber, ranked[0]?.waiterName || "未填写"];
+  }));
+  const ordersWithOriginalPerformance = new Set([...orderGroups].filter(([, candidates]) => candidates.some(order => order.performanceType === 1)).map(([orderNumber]) => orderNumber));
+  const businessOrders = new Set(orderOwners.keys());
 
   orders.forEach(order => {
     if (!people.has(order.waiterName)) people.set(order.waiterName, { name: order.waiterName, department: order.department, orders: new Set(), productCount: 0, gross: 0, refund: 0, net: 0, products: new Map() });
     const person = people.get(order.waiterName);
-    if (order.countAsOrder) {
+    const ownsOrder = order.countAsOrder && orderOwners.get(order.orderNumber) === order.waiterName;
+    const countsProductQuantity = order.countAsOrder && (ordersWithOriginalPerformance.has(order.orderNumber) ? order.performanceType === 1 : ownsOrder);
+    if (ownsOrder) {
       person.orders.add(order.orderNumber);
-      businessOrders.add(order.orderNumber);
     }
     person.gross += order.gross;
     person.refund += order.refund;
@@ -237,22 +272,23 @@ function buildReportForWindow(records, window) {
 
     order.products.forEach(product => {
       estimatedProducts ||= product.estimated;
-      person.productCount += product.quantity;
+      const countedQuantity = countsProductQuantity ? product.quantity : 0;
+      person.productCount += countedQuantity;
       const personProduct = person.products.get(product.name) || { quantity: 0, net: 0 };
-      personProduct.quantity += product.quantity;
+      personProduct.quantity += countedQuantity;
       personProduct.net += product.allocatedNet;
       person.products.set(product.name, personProduct);
 
       const item = products.get(product.name) || { name: product.name, codes: new Set(), orders: new Set(), quantity: 0, gross: 0, refund: 0, net: 0, staff: new Map() };
       if (product.code) item.codes.add(product.code);
       if (order.countAsOrder) item.orders.add(order.orderNumber);
-      item.quantity += product.quantity;
+      item.quantity += countedQuantity;
       item.gross += product.allocatedGross;
       item.refund += product.allocatedRefund;
       item.net += product.allocatedNet;
       const staffItem = item.staff.get(order.waiterName) || { name: order.waiterName, orders: new Set(), quantity: 0, gross: 0, refund: 0, net: 0 };
-      if (order.countAsOrder) staffItem.orders.add(order.orderNumber);
-      staffItem.quantity += product.quantity;
+      if (ownsOrder) staffItem.orders.add(order.orderNumber);
+      staffItem.quantity += countedQuantity;
       staffItem.gross += product.allocatedGross;
       staffItem.refund += product.allocatedRefund;
       staffItem.net += product.allocatedNet;
@@ -464,7 +500,10 @@ async function refreshErp() {
   elements.refresh.disabled = true;
   elements.refresh.classList.add("is-refreshing");
   try {
-    const archive = await fetchJson("/api/sync", { method: "POST", body: JSON.stringify({ date: elements.date.value }) });
+    const date = normalizeReportingDate(elements.date.value);
+    elements.date.value = date;
+    localStorage.setItem(DATE_KEY, date);
+    const archive = await fetchJson("/api/sync", { method: "POST", body: JSON.stringify({ date }) });
     currentRecords = archive.records;
     currentArchive = archive;
     setSource(archive.source || "ERP 个人业绩流水", archive.updatedAt);
@@ -849,7 +888,7 @@ document.querySelectorAll(".rank-tab").forEach(tab => tab.addEventListener("clic
 
 const today = normalizeReportingDate(localDateString());
 const savedDate = localStorage.getItem(DATE_KEY);
-elements.date.value = window.STATIC_DEFAULT_DATE || (savedDate === today ? savedDate : today);
+elements.date.value = normalizeReportingDate(window.STATIC_DEFAULT_DATE || (savedDate === today ? savedDate : today));
 elements.reportMonth.value = elements.date.value.slice(0, 7);
 elements.phaseMonth.value = elements.date.value.slice(0, 7);
 async function initialize() {
