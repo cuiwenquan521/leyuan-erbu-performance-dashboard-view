@@ -1,5 +1,27 @@
 (() => {
   const nativeFetch = window.fetch.bind(window);
+  const CLOUD_TARGETS_KEY = "leyuan-cloud-targets-v1";
+
+  function readLocalTargets() {
+    try {
+      const value = JSON.parse(localStorage.getItem(CLOUD_TARGETS_KEY) || "{}");
+      return value && typeof value === "object" ? value : {};
+    } catch {
+      return {};
+    }
+  }
+
+  function normalizeTargetPayload(value) {
+    const staffTargets = {};
+    Object.entries(value?.staffTargets || {}).forEach(([name, target]) => {
+      const amount = Math.max(0, Number(target) || 0);
+      staffTargets[String(name)] = amount;
+    });
+    return {
+      teamTarget: Math.max(0, Number(value?.teamTarget) || 0),
+      staffTargets,
+    };
+  }
 
   function decodeBase64(value) {
     const binary = atob(value);
@@ -36,12 +58,30 @@
 
   function installStaticApi(payload, role) {
     window.STATIC_ARCHIVE_MODE = true;
+    window.STATIC_USER_ROLE = role;
     window.STATIC_DEFAULT_DATE = payload.latestDate;
+    payload.targets = { ...(payload.targets || {}), ...readLocalTargets() };
     window.fetch = async (input, options = {}) => {
       const requestUrl = typeof input === "string" ? input : input.url;
       const url = new URL(requestUrl, window.location.href);
       if (!url.pathname.startsWith("/api/")) return nativeFetch(input, options);
       const method = String(options.method || "GET").toUpperCase();
+      if (url.pathname === "/api/targets" && method === "POST") {
+        if (role !== "admin") return jsonResponse({ message: "查看账号不能修改目标" }, 403);
+        try {
+          const request = typeof options.body === "string" ? JSON.parse(options.body) : options.body;
+          const month = String(request?.month || "");
+          if (!/^\d{4}-\d{2}$/.test(month)) return jsonResponse({ message: "目标月份无效" }, 400);
+          const target = normalizeTargetPayload(request);
+          const localTargets = readLocalTargets();
+          localTargets[month] = target;
+          localStorage.setItem(CLOUD_TARGETS_KEY, JSON.stringify(localTargets));
+          payload.targets[month] = target;
+          return jsonResponse(target);
+        } catch {
+          return jsonResponse({ message: "目标数据无效" }, 400);
+        }
+      }
       if (method !== "GET") return jsonResponse({ message: "云端存档仅允许查看" }, 403);
       if (url.pathname === "/api/status") {
         return jsonResponse({ ...payload.status, publicViewOnly: true, publicRole: role });
