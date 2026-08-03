@@ -62,6 +62,47 @@
     };
   }
 
+  function installCloudRefresh(session) {
+    const actions = document.querySelector(".toolbar-actions");
+    if (!actions || actions.querySelector(".cloud-refresh-button")) return;
+    const style = document.createElement("style");
+    style.textContent = `
+      .public-view-only .toolbar-actions{display:flex}
+      .public-view-only .toolbar-actions>.button:not(.cloud-refresh-button){display:none}
+    `;
+    document.head.appendChild(style);
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "button primary cloud-refresh-button";
+    button.title = "检查并载入最新发布的云端加密存档";
+    button.innerHTML = '<span class="refresh-icon" aria-hidden="true">↻</span> 实时刷新';
+    button.addEventListener("click", async () => {
+      button.disabled = true;
+      button.classList.add("is-refreshing");
+      try {
+        const response = await nativeFetch(`./encrypted-data.json?t=${Date.now()}`, { cache: "no-store" });
+        const nextManifest = await response.json();
+        if (nextManifest.generatedAt === session.generatedAt) {
+          if (typeof window.showToast === "function") window.showToast("当前已是最新数据");
+          return;
+        }
+        const envelope = nextManifest.envelopes.find(item => item.username === session.username);
+        if (!envelope) throw new Error("账号已失效，请重新登录");
+        const payload = await decryptEnvelope(nextManifest, envelope, session.password);
+        installStaticApi(payload, envelope.role);
+        session.generatedAt = nextManifest.generatedAt;
+        if (typeof window.initialize === "function") await window.initialize();
+        if (typeof window.showToast === "function") window.showToast("最新数据已载入");
+      } catch (refreshError) {
+        if (typeof window.showToast === "function") window.showToast(refreshError.message || "刷新失败，请稍后重试");
+      } finally {
+        button.disabled = false;
+        button.classList.remove("is-refreshing");
+      }
+    });
+    actions.appendChild(button);
+  }
+
   function createLogin() {
     const overlay = document.createElement("div");
     overlay.className = "cloud-login";
@@ -110,9 +151,11 @@
         if (!envelope) throw new Error("invalid");
         const payload = await decryptEnvelope(manifest, envelope, form.elements.password.value);
         installStaticApi(payload, envelope.role);
+        const session = { username, password: form.elements.password.value, generatedAt: manifest.generatedAt };
         overlay.remove();
         const script = document.createElement("script");
         script.src = `./app.js?v=${encodeURIComponent(manifest.generatedAt)}`;
+        script.addEventListener("load", () => installCloudRefresh(session));
         document.body.appendChild(script);
       } catch {
         error.textContent = "账号或密码不正确";
