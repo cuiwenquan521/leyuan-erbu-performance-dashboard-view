@@ -425,8 +425,10 @@ function setPublicViewOnly(enabled) {
   });
   if (publicViewOnly) {
     elements.notice.classList.add("connected");
-    elements.noticeTitle.textContent = "公网只读查看";
-    elements.noticeText.textContent = "数据由本机 ERP 只读服务同步，当前链接不能连接、刷新或修改数据。";
+    elements.noticeTitle.textContent = window.STATIC_ARCHIVE_MODE ? "云端加密存档" : "公网只读查看";
+    elements.noticeText.textContent = window.STATIC_ARCHIVE_MODE
+      ? "点击右上角“实时刷新”可检查并载入最新发布的 ERP 加密存档。"
+      : "数据由本机 ERP 只读服务同步，当前链接不能连接、刷新或修改数据。";
   }
 }
 
