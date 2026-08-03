@@ -54,8 +54,10 @@ main { max-width: 1480px; margin: 0 auto; padding: 20px 26px 24px; }
 .notice.connected { color: #315c51; background: #eff8f5; border-color: #c6ddd7; }
 .notice.connected strong { color: #164f40; }
 .readonly-mark { flex: 0 0 auto; padding: 3px 7px; color: var(--primary); border: 1px solid #bcd6cf; border-radius: 4px; background: #fff; }
-.public-view-only .toolbar-actions, .public-view-only #saveTargets, .public-view-only .target-control { display: none; }
-.public-view-only .target-input { color: #35434f; border-color: transparent; background: transparent; }
+.public-view-only .toolbar-actions { display: none; }
+.public-view-only:not(.cloud-targets-editable) #saveTargets,
+.public-view-only:not(.cloud-targets-editable) .target-control { display: none; }
+.public-view-only:not(.cloud-targets-editable) .target-input { color: #35434f; border-color: transparent; background: transparent; }
 
 .view-layout { display: grid; grid-template-columns: 128px minmax(0,1fr); column-gap: 14px; align-items: start; }
 .view-tabs { margin-top: 14px; padding: 6px; display: flex; flex-direction: column; gap: 3px; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; }
@@ -169,8 +171,18 @@ tbody tr:hover { background: #f8fbfa; }
 .target-control input { width: 175px; height: 34px; padding: 0 10px 0 5px; border: 0; outline: 0; background: transparent; }
 .monthly-toolbar .button { margin-left: auto; }
 .monthly-metrics { margin-top: 12px; }
-.monthly-target-table th:nth-child(1) { width: 17%; } .monthly-target-table th:nth-child(2) { width: 23%; } .monthly-target-table th:nth-child(n+3) { width: 15%; }
-.target-input { width: 120px; height: 32px; padding: 0 8px; text-align: right; border: 1px solid #c8d1d8; border-radius: 4px; }
+.monthly-target-table th,
+.monthly-target-table td { vertical-align: middle; }
+.monthly-target-table th + th,
+.monthly-target-table td + td { border-left: 1px solid #e1e7ea; }
+.monthly-target-table th:nth-child(1), .monthly-target-table td:nth-child(1) { width: 17%; }
+.monthly-target-table th:nth-child(2), .monthly-target-table td:nth-child(2) { width: 23%; }
+.monthly-target-table th:nth-child(n+3), .monthly-target-table td:nth-child(n+3) { width: 15%; }
+.monthly-target-table tbody tr { height: 58px; }
+.monthly-target-table .target-cell { padding-top: 8px; padding-bottom: 8px; }
+.target-input { display: block; width: 100%; max-width: 132px; height: 34px; margin-left: auto; padding: 0 9px; color: #24313d; text-align: right; font-variant-numeric: tabular-nums; border: 1px solid #b9c7d1; border-radius: 4px; background: #fff; }
+.target-input:focus { outline: 2px solid rgba(23,107,87,.17); border-color: var(--primary); }
+.target-input:disabled { opacity: 1; }
 .completion-value { color: var(--primary); font-weight: 700; }
 .monthly-ranking-heading { align-items: end; }
 .rank-tabs { display: flex; gap: 3px; padding: 3px; background: #eef1f3; border-radius: 5px; }
