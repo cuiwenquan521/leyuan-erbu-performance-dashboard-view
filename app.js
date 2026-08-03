@@ -136,7 +136,7 @@ function reportWindow(dateString) {
   }
   const previous = new Date(selected);
   previous.setDate(previous.getDate() - (selected.getDay() === 1 ? 2 : 1));
-  return { start: `${localDateString(previous)} ${reportSettings.cutoffTime}:01`, end };
+  return { start: `${localDateString(previous)} ${reportSettings.cutoffTime}:00`, end };
 }
 
 function normalizeReportingDate(dateString) {
@@ -239,7 +239,7 @@ function normalizeRecord(record, index) {
 
 function prepareOrders(records, window) {
   const unique = new Map();
-  records.map(normalizeRecord).filter(order => order.orderTime >= window.start && order.orderTime <= window.end).forEach(order => {
+  records.map(normalizeRecord).filter(order => order.orderTime >= window.start && order.orderTime < window.end).forEach(order => {
     if (!unique.has(order.recordId)) { unique.set(order.recordId, order); return; }
     const existing = unique.get(order.recordId);
     const productKeys = new Set(existing.products.map(product => `${product.name}|${product.code}|${product.quantity}`));
@@ -984,7 +984,7 @@ function showToast(message) {
 
 elements.connect.addEventListener("click", connectErp);
 elements.refresh.addEventListener("click", refreshErp);
-elements.date.addEventListener("change", () => {
+elements.date.addEventListener("change", async () => {
   const normalized = normalizeReportingDate(elements.date.value);
   if (normalized !== elements.date.value) {
     elements.date.value = normalized;
@@ -995,10 +995,21 @@ elements.date.addEventListener("change", () => {
   elements.reportMonth.value = selectedMonth;
   elements.phaseMonth.value = selectedMonth;
   monthlyReport = null;
+  currentRecords = [];
   currentArchive = null;
   render();
-  loadArchives();
-  loadMonthlyReport();
+  const opened = await openArchive(elements.date.value, { activate: false, notify: false });
+  if (!opened) {
+    setSource("等待同步", null);
+    elements.notice.classList.add("connected");
+    elements.noticeTitle.textContent = "该统计日正在进行";
+    elements.noticeText.textContent = window.STATIC_ARCHIVE_MODE
+      ? "当前云端尚未收到该统计日存档，请稍后点击右上角“实时刷新”。"
+      : "当前尚无该统计日存档，可点击“实时刷新”立即读取 ERP 只读数据。";
+    render();
+  }
+  await loadArchives();
+  await loadMonthlyReport();
 });
 document.querySelectorAll(".tab").forEach(tab => tab.addEventListener("click", () => activateView(tab.dataset.view)));
 elements.archiveBody.addEventListener("click", event => {
