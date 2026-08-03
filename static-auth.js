@@ -1,6 +1,24 @@
 (() => {
   const nativeFetch = window.fetch.bind(window);
   const CLOUD_TARGETS_KEY = "leyuan-cloud-targets-v1";
+  const CLOUD_SESSION_KEY = "leyuan-cloud-session-v1";
+
+  function readCloudSession() {
+    try {
+      const session = JSON.parse(sessionStorage.getItem(CLOUD_SESSION_KEY) || "null");
+      return session?.username && session?.password ? session : null;
+    } catch {
+      return null;
+    }
+  }
+
+  function saveCloudSession(session) {
+    sessionStorage.setItem(CLOUD_SESSION_KEY, JSON.stringify(session));
+  }
+
+  function clearCloudSession() {
+    sessionStorage.removeItem(CLOUD_SESSION_KEY);
+  }
 
   function readLocalTargets() {
     try {
@@ -131,6 +149,7 @@
         const payload = await decryptEnvelope(nextManifest, envelope, session.password);
         installStaticApi(payload, envelope.role);
         session.generatedAt = nextManifest.generatedAt;
+        saveCloudSession(session);
         if (typeof window.initialize === "function") await window.initialize();
         if (typeof window.showToast === "function") window.showToast("最新数据已载入");
       } catch (refreshError) {
@@ -141,6 +160,18 @@
       }
     });
     actions.appendChild(button);
+  }
+
+  async function completeLogin(manifest, envelope, password, overlay) {
+    const payload = await decryptEnvelope(manifest, envelope, password);
+    installStaticApi(payload, envelope.role);
+    const session = { username: envelope.username, password, generatedAt: manifest.generatedAt };
+    saveCloudSession(session);
+    overlay.remove();
+    const script = document.createElement("script");
+    script.src = `./app.js?v=${encodeURIComponent(manifest.generatedAt)}`;
+    script.addEventListener("load", () => installCloudRefresh(session));
+    document.body.appendChild(script);
   }
 
   function createLogin() {
@@ -189,15 +220,9 @@
       const envelope = manifest.envelopes.find(item => item.username === username);
       try {
         if (!envelope) throw new Error("invalid");
-        const payload = await decryptEnvelope(manifest, envelope, form.elements.password.value);
-        installStaticApi(payload, envelope.role);
-        const session = { username, password: form.elements.password.value, generatedAt: manifest.generatedAt };
-        overlay.remove();
-        const script = document.createElement("script");
-        script.src = `./app.js?v=${encodeURIComponent(manifest.generatedAt)}`;
-        script.addEventListener("load", () => installCloudRefresh(session));
-        document.body.appendChild(script);
+        await completeLogin(manifest, envelope, form.elements.password.value, overlay);
       } catch {
+        clearCloudSession();
         error.textContent = "账号或密码不正确";
         button.disabled = false;
         form.elements.password.select();
@@ -207,6 +232,18 @@
     try {
       const response = await nativeFetch("./encrypted-data.json", { cache: "no-store" });
       manifest = await response.json();
+      const savedSession = readCloudSession();
+      if (savedSession) {
+        const envelope = manifest.envelopes.find(item => item.username === savedSession.username);
+        try {
+          if (!envelope) throw new Error("invalid");
+          await completeLogin(manifest, envelope, savedSession.password, overlay);
+          return;
+        } catch {
+          clearCloudSession();
+          error.textContent = "登录信息已更新，请重新输入账号密码";
+        }
+      }
       button.disabled = false;
     } catch {
       error.textContent = "云端数据暂时无法读取";
