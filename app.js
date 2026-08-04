@@ -31,6 +31,8 @@ const elements = {
   productMonth: document.querySelector("#productMonth"),
   allocationState: document.querySelector("#allocationState"),
   productBody: document.querySelector("#productBody"),
+  productTotals: document.querySelector("#productTotals"),
+  productMonthlySummary: document.querySelector("#productMonthlySummary"),
   staffNetAverage: document.querySelector("#staffNetAverage"),
   topStaffNet: document.querySelector("#topStaffNet"),
   teamOrderAverage: document.querySelector("#teamOrderAverage"),
@@ -424,6 +426,11 @@ function render() {
     const staffDetails = [...product.staff.values()].sort((a, b) => b.net - a.net).map(item => `<div><span>${escapeHtml(item.name)}</span><strong>${item.orders.size} 单 / ${item.quantity} 件</strong><span>业绩 ${currency(item.gross)}</span><strong class="net-amount">净值 ${currency(item.net)}</strong></div>`).join("");
     return `<tr><td><button class="details-toggle" type="button" data-product-toggle="${index}" aria-expanded="false" title="查看员工产品明细">＋</button><span class="product-name">${escapeHtml(product.name)}</span>${product.codes.size ? `<span class="product-code">${escapeHtml([...product.codes].join(" / "))}</span>` : ""}</td><td class="number">${product.orderCount}</td><td class="number">${product.quantity}</td><td class="number">${currency(product.gross)}</td><td class="number refund-amount">${currency(product.refund)}</td><td class="number net-amount">${currency(product.net)}</td><td><span class="analysis-label ${product.analysis.type}">${escapeHtml(product.analysis.text)}</span></td></tr><tr class="detail-row" data-product-detail="${index}" hidden><td colspan="7"><div class="detail-panel"><h3>员工销售明细</h3><div class="detail-grid">${staffDetails}</div></div></td></tr>`;
   }).join("") || `<tr><td colspan="7"><div class="empty-state"><div class="empty-icon" aria-hidden="true">月</div><strong>${escapeHtml(analysisMonth.replace("-", "年"))}月暂无产品数据</strong><span>该月份尚未生成每日存档，后续存档后会自动纳入月度产品分析。</span></div></td></tr>`;
+  const totalQuantity = analysisReport.products.reduce((sum, product) => sum + product.quantity, 0);
+  elements.productTotals.innerHTML = analysisReport.products.length
+    ? `<tr><td><strong>本月合计（${analysisReport.products.length} 种）</strong></td><td class="number" title="整月去重订单数">${analysisReport.orderCount}</td><td class="number">${plainNumber(totalQuantity)}</td><td class="number">${currency(analysisReport.totals.gross)}</td><td class="number refund-amount">${currency(analysisReport.totals.refund)}</td><td class="number net-amount">${currency(analysisReport.totals.net)}</td><td>完整月汇总</td></tr>`
+    : "";
+  renderProductMonthlySummary(analysisReport, analysisMonth);
 
   const staffAverage = analysisReport.staff.length ? analysisReport.totals.net / analysisReport.staff.length : 0;
   const topNet = analysisReport.staff[0]?.net || 0;
@@ -461,6 +468,37 @@ function render() {
 
   elements.archiveState.textContent = currentArchive ? `已存档 · ${formatDateTime(currentArchive.updatedAt)}` : "当前为未存档数据";
   elements.archiveState.classList.toggle("saved", Boolean(currentArchive));
+}
+
+function renderProductMonthlySummary(report, month) {
+  const products = report.products || [];
+  const monthLabel = `${month.replace("-", "年")}月`;
+  if (!products.length) {
+    elements.productMonthlySummary.innerHTML = `<div class="product-ai-heading"><h3>${escapeHtml(monthLabel)}产品 AI 总结</h3><p>该月暂无产品数据，暂不能生成分析结论。</p></div>`;
+    return;
+  }
+  const focus = products.filter(product => product.analysis.type === "focus").slice(0, 5);
+  const refundRisks = [...products].filter(product => product.refund > 0).sort((left, right) => right.refundRate - left.refundRate || right.refund - left.refund).slice(0, 4);
+  const refundNames = new Set(refundRisks.map(product => product.name));
+  const opportunities = products.filter(product => product.analysis.type === "warning" && !refundNames.has(product.name)).sort((left, right) => left.orderCount - right.orderCount || left.net - right.net).slice(0, 5);
+  const topProduct = products[0];
+  const topShare = report.totals.net > 0 ? topProduct.net / report.totals.net : 0;
+  const focusText = focus.length
+    ? focus.map(product => `${product.name}（${product.quantity}件，净值${currency(product.net)}）`).join("；")
+    : "本月暂无同时高于产品净值均值和订单均值的产品。";
+  const refundText = refundRisks.length
+    ? refundRisks.map(product => `${product.name}（退款率${percent(product.refundRate)}）`).join("；")
+    : "本月产品暂无退款记录。";
+  const opportunityText = opportunities.length
+    ? opportunities.map(product => `${product.name}（${product.analysis.text}）`).join("；")
+    : "其余产品整体接近团队均值。";
+  const recommendations = [];
+  if (focus.length) recommendations.push(`优先复盘“${focus[0].name}”的成交人员、客户需求和组合方式，并复制到同类产品。`);
+  if (topShare >= .35) recommendations.push(`“${topProduct.name}”贡献本月${percent(topShare)}净值，产值集中度较高，建议同步培养第二重点产品。`);
+  if (report.overallRefundRate > .1) recommendations.push(`整体退款率为${percent(report.overallRefundRate)}，建议优先核对退款产品的订单原因和售前匹配。`);
+  else if (refundRisks.length) recommendations.push("整体退款率可控，但仍需逐单复盘退款率靠前的产品。 ");
+  if (opportunities.length) recommendations.push("低订单产品建议从客户需求匹配、触达频次和关联组合三个方向逐项验证。 ");
+  elements.productMonthlySummary.innerHTML = `<div class="product-ai-heading"><h3>${escapeHtml(monthLabel)}产品 AI 总结</h3><p>依据本月订单数、件数、净值与退款率自动归纳</p></div><div class="product-ai-grid"><div><strong>重点售卖产品</strong><p>${escapeHtml(focusText)}</p></div><div><strong>退款关注产品</strong><p>${escapeHtml(refundText)}</p></div><div><strong>增长机会产品</strong><p>${escapeHtml(opportunityText)}</p></div><div><strong>本月行动建议</strong><p>${escapeHtml(recommendations.join(" ") || "保持当前产品结构，并持续复盘高净值订单。")}</p></div></div>`;
 }
 
 function formatDateTime(value) {

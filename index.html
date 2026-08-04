@@ -138,12 +138,14 @@
               <span id="allocationState" class="section-status">订单净值按件数分摊</span>
             </div>
           </div>
-          <div class="table-wrap">
+          <div class="table-wrap product-table-wrap">
             <table class="product-table">
               <thead><tr><th>中文产品名称</th><th class="number">订单数</th><th class="number">件数</th><th class="number">业绩</th><th class="number">退款</th><th class="number">产品净值</th><th>分析结论</th></tr></thead>
               <tbody id="productBody"></tbody>
+              <tfoot id="productTotals"></tfoot>
             </table>
           </div>
+          <section id="productMonthlySummary" class="product-ai-summary" aria-live="polite"></section>
         </section>
       </section>
 
