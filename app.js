@@ -462,8 +462,8 @@ function setPublicViewOnly(enabled) {
     elements.noticeTitle.textContent = window.STATIC_ARCHIVE_MODE ? "云端加密存档" : "公网只读查看";
     elements.noticeText.textContent = window.STATIC_ARCHIVE_MODE
       ? canEditTargets
-        ? "点击右上角“实时刷新”可载入最新 ERP 存档；月度目标可在当前浏览器填写保存。"
-        : "点击右上角“实时刷新”可检查并载入最新发布的 ERP 加密存档。"
+        ? "点击右上角“获取最新数据”可载入最新 ERP 存档；月度目标可在当前浏览器填写保存。"
+        : "点击右上角“获取最新数据”可检查并载入最新发布的 ERP 加密存档。"
       : "数据由本机 ERP 只读服务同步，当前链接不能连接、刷新或修改数据。";
   }
 }
@@ -1067,5 +1067,16 @@ async function initialize() {
   lastObservedAutoSync = status.autoSync?.lastSuccessAt || "";
 }
 
-initialize();
+async function handleStartupAction() {
+  if (window.STATIC_ARCHIVE_MODE) return;
+  const params = new URLSearchParams(window.location.search);
+  const shouldConnect = params.get("connect") === "1";
+  const shouldSync = params.get("sync") === "1";
+  if (!shouldConnect && !shouldSync) return;
+  history.replaceState(null, "", `${window.location.pathname}${window.location.hash}`);
+  if (shouldConnect) await connectErp();
+  else await refreshErp();
+}
+
+initialize().then(handleStartupAction).catch(error => showToast(error.message || "页面初始化失败"));
 setInterval(watchScheduledSync, 60_000);

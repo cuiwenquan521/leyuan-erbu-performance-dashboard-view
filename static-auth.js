@@ -126,7 +126,7 @@
     const style = document.createElement("style");
     style.textContent = `
       .public-view-only .toolbar-actions{display:flex}
-      .public-view-only .toolbar-actions>.button:not(.cloud-refresh-button){display:none}
+      .public-view-only .toolbar-actions>.button:not(.cloud-refresh-button):not(.local-erp-button){display:none}
     `;
     document.head.appendChild(style);
     const button = document.createElement("button");
@@ -140,7 +140,7 @@
       if (!response.ok) throw new Error("云端数据读取失败");
       const nextManifest = await response.json();
       if (nextManifest.generatedAt === session.generatedAt) {
-        if (notify && typeof window.showToast === "function") window.showToast("当前已是最新云端数据，以上方 ERP 同步时间为准");
+        if (notify && typeof window.showToast === "function") window.showToast("云端暂无新存档，以上方 ERP 同步时间为准");
         return false;
       }
       const envelope = nextManifest.envelopes.find(item => item.username === session.username);
@@ -166,6 +166,23 @@
         button.classList.remove("is-refreshing");
       }
     });
+    if (session.role === "admin") {
+      const connect = document.createElement("a");
+      connect.className = "button local-erp-button";
+      connect.href = "http://127.0.0.1:8765/?connect=1";
+      connect.target = "_blank";
+      connect.rel = "noopener";
+      connect.title = "在办公电脑打开本机页面并连接 ERP";
+      connect.textContent = "▣ 连接 ERP";
+      const sync = document.createElement("a");
+      sync.className = "button primary local-erp-button";
+      sync.href = "http://127.0.0.1:8765/?sync=1";
+      sync.target = "_blank";
+      sync.rel = "noopener";
+      sync.title = "在办公电脑立即读取 ERP 个人业绩流水";
+      sync.textContent = "↻ 立即同步 ERP";
+      actions.append(connect, sync);
+    }
     actions.appendChild(button);
     setInterval(() => {
       if (button.disabled) return;
@@ -176,7 +193,7 @@
   async function completeLogin(manifest, envelope, password, overlay) {
     const payload = await decryptEnvelope(manifest, envelope, password);
     installStaticApi(payload, envelope.role);
-    const session = { username: envelope.username, password, generatedAt: manifest.generatedAt };
+    const session = { username: envelope.username, password, role: envelope.role, generatedAt: manifest.generatedAt };
     saveCloudSession(session);
     overlay.remove();
     const script = document.createElement("script");
