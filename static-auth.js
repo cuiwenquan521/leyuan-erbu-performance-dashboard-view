@@ -144,12 +144,21 @@
     button.title = "载入最近一次后台 ERP 同步后发布的云端数据";
     button.innerHTML = '<span class="refresh-icon" aria-hidden="true">↻</span> 获取最新数据';
 
+    function updateCheckTime() {
+      const label = document.querySelector("#lastUpdated");
+      if (!label) return;
+      const erpTime = label.textContent.split(" · 页面检查：")[0];
+      const checkedAt = new Date().toLocaleString("zh-CN", { hour12: false });
+      label.textContent = `${erpTime} · 页面检查：${checkedAt}`;
+    }
+
     async function loadLatest(notify = true) {
       const response = await nativeFetch(`./encrypted-data.json?t=${Date.now()}`, { cache: "no-store" });
       if (!response.ok) throw new Error("云端数据读取失败");
       const nextManifest = await response.json();
+      updateCheckTime();
       if (nextManifest.generatedAt === session.generatedAt) {
-        if (notify && typeof window.showToast === "function") window.showToast("云端暂无新存档，以上方 ERP 同步时间为准");
+        if (notify && typeof window.showToast === "function") window.showToast("已检查：当前已是最新云端数据；ERP 数据时间未变化");
         return false;
       }
       const envelope = nextManifest.envelopes.find(item => item.username === session.username);
@@ -159,6 +168,7 @@
       session.generatedAt = nextManifest.generatedAt;
       saveCloudSession(session);
       if (typeof window.initialize === "function") await window.initialize();
+      updateCheckTime();
       if (notify && typeof window.showToast === "function") window.showToast("最新云端数据已载入");
       return true;
     }
@@ -178,21 +188,52 @@
     if (session.role === "admin") {
       const connect = document.createElement("a");
       connect.className = "button local-erp-button";
-      connect.href = "http://127.0.0.1:8765/?connect=1";
+      connect.href = "http://127.0.0.1:8765/?connect=1&bridge=1";
       connect.target = "_blank";
-      connect.rel = "noopener";
       connect.title = "在办公电脑打开本机页面并连接 ERP";
       connect.textContent = "▣ 连接 ERP";
       const sync = document.createElement("a");
       sync.className = "button primary local-erp-button";
-      sync.href = "http://127.0.0.1:8765/?sync=1";
+      sync.href = "http://127.0.0.1:8765/?sync=1&bridge=1";
       sync.target = "_blank";
-      sync.rel = "noopener";
       sync.title = "在办公电脑立即读取 ERP 个人业绩流水";
       sync.textContent = "↻ 立即同步 ERP";
       actions.append(connect, sync);
     }
     actions.appendChild(button);
+
+    if (!window.__LEYUAN_ERP_BRIDGE_LISTENER__) {
+      window.__LEYUAN_ERP_BRIDGE_LISTENER__ = true;
+      window.addEventListener("message", async event => {
+        if (event.origin !== "http://127.0.0.1:8765" || !event.data?.type?.startsWith("leyuan-erp-")) return;
+        if (event.data.type === "leyuan-erp-connect-complete") {
+          if (typeof window.showToast === "function") window.showToast(event.data.connected ? "ERP 已连接" : "ERP 登录窗口已打开，请完成登录后再同步");
+          return;
+        }
+        if (event.data.type === "leyuan-erp-sync-error") {
+          if (typeof window.showToast === "function") window.showToast(event.data.message || "ERP 同步失败");
+          return;
+        }
+        button.disabled = true;
+        button.classList.add("is-refreshing");
+        try {
+          const deadline = Date.now() + 90_000;
+          while (Date.now() < deadline) {
+            if (await loadLatest(false)) {
+              if (typeof window.showToast === "function") window.showToast("ERP 已同步，最新数据已载入");
+              return;
+            }
+            await new Promise(resolve => setTimeout(resolve, 2000));
+          }
+          throw new Error("ERP 已同步，但云端页面尚未更新，请稍后点击“获取最新数据”");
+        } catch (error) {
+          if (typeof window.showToast === "function") window.showToast(error.message || "最新数据载入失败");
+        } finally {
+          button.disabled = false;
+          button.classList.remove("is-refreshing");
+        }
+      });
+    }
     setInterval(() => {
       if (button.disabled) return;
       loadLatest(false).catch(() => {});

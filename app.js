@@ -559,13 +559,15 @@ async function connectErp() {
     const result = await fetchJson("/api/connect", { method: "POST", body: "{}" });
     setConnection(result.connected);
     showToast(result.connected ? "已识别 ERP 登录状态" : "请在弹出的 ERP 窗口中完成登录");
+    return result;
   } catch (error) {
     if (String(error.message).includes("Failed to fetch")) {
       await new Promise(resolve => setTimeout(resolve, 1000));
       const status = await checkStatus();
-      if (status.connected) { showToast("ERP 已连接"); return; }
+      if (status.connected) { showToast("ERP 已连接"); return status; }
     }
     showToast(`连接失败：${error.message}`);
+    return null;
   }
   finally { elements.connect.disabled = false; }
 }
@@ -588,9 +590,11 @@ async function refreshErp() {
     elements.groupMonth.value = date.slice(0, 7);
     await loadGroupAnalysis();
     showToast(archive.warning || `ERP同步完成：${formatDateTime(archive.updatedAt)}，读取 ${archive.flowCount} 条流水，按订单号去重为 ${archive.orderCount} 单`);
+    return archive;
   } catch (error) {
     if (error.status === 401) setConnection(false);
     showToast(`刷新失败：${error.message}`);
+    return null;
   } finally {
     elements.refresh.disabled = false;
     elements.refresh.classList.remove("is-refreshing");
@@ -1350,10 +1354,45 @@ async function handleStartupAction() {
   const params = new URLSearchParams(window.location.search);
   const shouldConnect = params.get("connect") === "1";
   const shouldSync = params.get("sync") === "1";
+  const isBridge = params.get("bridge") === "1";
   if (!shouldConnect && !shouldSync) return;
   history.replaceState(null, "", `${window.location.pathname}${window.location.hash}`);
-  if (shouldConnect) await connectErp();
-  else await refreshErp();
+  if (shouldConnect) {
+    const result = await connectErp();
+    if (isBridge) {
+      window.opener?.postMessage({ type: "leyuan-erp-connect-complete", connected: Boolean(result?.connected) }, "*");
+      window.setTimeout(() => window.close(), 500);
+    }
+    return;
+  }
+
+  const archive = await refreshErp();
+  if (!isBridge) return;
+  if (!archive) {
+    window.opener?.postMessage({ type: "leyuan-erp-sync-error", message: "ERP 同步失败，请检查本机同步服务和 ERP 登录状态" }, "*");
+    return;
+  }
+  const deadline = Date.now() + 120_000;
+  let publishError = "";
+  let publishComplete = false;
+  while (Date.now() < deadline) {
+    const status = await fetchJson("/api/status").catch(() => null);
+    publishError = status?.cloudPublish?.lastError || "";
+    const publishedAt = Date.parse(status?.cloudPublish?.lastSuccessAt || "");
+    if (status?.cloudPublish && !status.cloudPublish.inProgress && publishedAt >= Date.parse(archive.updatedAt)) {
+      publishComplete = true;
+      break;
+    }
+    await new Promise(resolve => setTimeout(resolve, 1000));
+  }
+  if (!publishComplete) {
+    const message = publishError ? `云端发布失败：${publishError}` : "ERP 已同步，但等待云端发布超时";
+    window.opener?.postMessage({ type: "leyuan-erp-sync-error", message }, "*");
+    window.setTimeout(() => window.close(), 1500);
+    return;
+  }
+  window.opener?.postMessage({ type: "leyuan-erp-sync-complete", updatedAt: archive.updatedAt }, "*");
+  window.setTimeout(() => window.close(), 500);
 }
 
 initialize().then(handleStartupAction).catch(error => showToast(error.message || "页面初始化失败"));

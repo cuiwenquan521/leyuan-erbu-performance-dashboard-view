@@ -27,6 +27,7 @@ button, input { font: inherit; }
 .brand-block h1 { margin: 0; color: #172b39; font-size: 27px; line-height: 1.25; letter-spacing: 0; font-weight: 800; white-space: nowrap; }
 .brand-block p { display: none; }
 .status-line { display: flex; align-items: center; gap: 11px; color: var(--muted); font-size: 12px; }
+.status-line #lastUpdated { max-width: 360px; text-align: right; white-space: normal; line-height: 1.45; }
 .source-badge { padding: 4px 8px; border: 1px solid #bdd7d0; border-radius: 4px; color: var(--primary); background: #eff8f5; }
 .source-badge.demo { color: #78591a; border-color: #dfcfaa; background: #fff8e8; }
 
