@@ -46,6 +46,15 @@
     return Uint8Array.from(binary, character => character.charCodeAt(0));
   }
 
+  async function decompressPayload(value, compression) {
+    if (!compression) return value;
+    if (compression !== "gzip" || typeof DecompressionStream === "undefined") {
+      throw new Error("当前浏览器不支持新版加密存档，请升级浏览器后重试");
+    }
+    const stream = new Blob([value]).stream().pipeThrough(new DecompressionStream("gzip"));
+    return new Uint8Array(await new Response(stream).arrayBuffer());
+  }
+
   async function decryptEnvelope(manifest, envelope, password) {
     const material = await crypto.subtle.importKey(
       "raw",
@@ -60,10 +69,11 @@
       salt: decodeBase64(envelope.salt),
       iterations: manifest.iterations,
     }, material, { name: "AES-GCM", length: 256 }, false, ["decrypt"]);
-    const plain = await crypto.subtle.decrypt({
+    const decrypted = await crypto.subtle.decrypt({
       name: "AES-GCM",
       iv: decodeBase64(envelope.iv),
     }, key, decodeBase64(envelope.data));
+    const plain = await decompressPayload(new Uint8Array(decrypted), manifest.compression);
     return JSON.parse(new TextDecoder().decode(plain));
   }
 
