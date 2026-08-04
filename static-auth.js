@@ -138,10 +138,43 @@
       button.disabled = true;
       button.classList.add("is-refreshing");
       try {
-        const response = await nativeFetch(`./encrypted-data.json?t=${Date.now()}`, { cache: "no-store" });
-        const nextManifest = await response.json();
+        let localSyncTriggered = false;
+        if (window.location.hostname === "cuiwenquan521.github.io") {
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 5_000);
+          try {
+            const date = document.querySelector("#reportDate")?.value || "";
+            const localResponse = await nativeFetch("http://127.0.0.1:8765/api/sync", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ date }),
+              cache: "no-store",
+              signal: controller.signal,
+            });
+            if (localResponse.ok) {
+              localSyncTriggered = true;
+              if (typeof window.showToast === "function") window.showToast("ERP读取完成，正在更新云端数据");
+            }
+          } catch {}
+          finally { clearTimeout(timeout); }
+        }
+
+        const deadline = Date.now() + (localSyncTriggered ? 90_000 : 0);
+        let nextManifest;
+        do {
+          const response = await nativeFetch(`./encrypted-data.json?t=${Date.now()}`, { cache: "no-store" });
+          if (!response.ok) throw new Error("云端数据读取失败");
+          nextManifest = await response.json();
+          if (nextManifest.generatedAt !== session.generatedAt) break;
+          if (!localSyncTriggered || Date.now() >= deadline) break;
+          await new Promise(resolve => setTimeout(resolve, 3_000));
+        } while (true);
+
         if (nextManifest.generatedAt === session.generatedAt) {
-          if (typeof window.showToast === "function") window.showToast("当前已是最新数据");
+          const message = localSyncTriggered
+            ? "ERP已读取，云端发布尚未完成，请稍后再点一次"
+            : "已读取最新云端数据；本机ERP将在后台定时同步";
+          if (typeof window.showToast === "function") window.showToast(message);
           return;
         }
         const envelope = nextManifest.envelopes.find(item => item.username === session.username);
@@ -151,7 +184,7 @@
         session.generatedAt = nextManifest.generatedAt;
         saveCloudSession(session);
         if (typeof window.initialize === "function") await window.initialize();
-        if (typeof window.showToast === "function") window.showToast("最新数据已载入");
+        if (typeof window.showToast === "function") window.showToast(localSyncTriggered ? "ERP最新数据已同步" : "最新云端数据已载入");
       } catch (refreshError) {
         if (typeof window.showToast === "function") window.showToast(refreshError.message || "刷新失败，请稍后重试");
       } finally {
