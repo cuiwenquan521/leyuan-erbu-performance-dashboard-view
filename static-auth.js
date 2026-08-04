@@ -2,6 +2,7 @@
   const nativeFetch = window.fetch.bind(window);
   const CLOUD_TARGETS_KEY = "leyuan-cloud-targets-v1";
   const CLOUD_SESSION_KEY = "leyuan-cloud-session-v1";
+  const LOCAL_GROUP_ASSIGNMENTS_URL = "http://127.0.0.1:8765/api/group-assignments";
 
   function readCloudSession() {
     try {
@@ -116,6 +117,23 @@
           return jsonResponse(target);
         } catch {
           return jsonResponse({ message: "目标数据无效" }, 400);
+        }
+      }
+      if (url.pathname === "/api/group-assignments" && method === "POST") {
+        if (role !== "admin") return jsonResponse({ message: "查看账号不能修改群维护配置" }, 403);
+        try {
+          const response = await nativeFetch(LOCAL_GROUP_ASSIGNMENTS_URL, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: options.body,
+            cache: "no-store",
+          });
+          const result = await response.json();
+          if (!response.ok) return jsonResponse({ message: result.message || "本机群配置保存失败" }, response.status);
+          payload.groupAssignments = result;
+          return jsonResponse(result);
+        } catch {
+          return jsonResponse({ message: "无法连接本机同步服务，请确认电脑已启动且同步窗口正在运行" }, 503);
         }
       }
       if (method !== "GET") return jsonResponse({ message: "云端存档仅允许查看" }, 403);

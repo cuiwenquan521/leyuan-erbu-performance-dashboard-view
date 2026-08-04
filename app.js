@@ -124,7 +124,7 @@ function targetsEditable() {
 }
 
 function groupAssignmentsEditable() {
-  return !publicViewOnly;
+  return !publicViewOnly || Boolean(window.STATIC_ARCHIVE_MODE && window.STATIC_USER_ROLE === "admin");
 }
 
 function staffWithRoster(staff) {
@@ -487,14 +487,16 @@ function setConnection(connected) {
 function setPublicViewOnly(enabled) {
   publicViewOnly = Boolean(enabled);
   const canEditTargets = targetsEditable();
+  const canEditGroups = groupAssignmentsEditable();
   document.body.classList.toggle("public-view-only", publicViewOnly);
   document.body.classList.toggle("cloud-targets-editable", publicViewOnly && canEditTargets);
   [elements.connect, elements.refresh, elements.savePhaseSettings].forEach(control => {
     if (control) control.hidden = publicViewOnly;
   });
-  [elements.syncGroupOrders, elements.syncGroupRange, elements.saveGroupAssignments].forEach(control => {
+  [elements.syncGroupOrders, elements.syncGroupRange].forEach(control => {
     if (control) control.hidden = publicViewOnly;
   });
+  if (elements.saveGroupAssignments) elements.saveGroupAssignments.hidden = publicViewOnly && !canEditGroups;
   if (elements.syncAnnualPerformance) elements.syncAnnualPerformance.hidden = publicViewOnly;
   if (elements.saveTargets) elements.saveTargets.hidden = publicViewOnly && !canEditTargets;
   if (elements.teamTarget) elements.teamTarget.disabled = !canEditTargets;
@@ -509,7 +511,7 @@ function setPublicViewOnly(enabled) {
     elements.noticeTitle.textContent = window.STATIC_ARCHIVE_MODE ? "云端加密存档" : "公网只读查看";
     elements.noticeText.textContent = window.STATIC_ARCHIVE_MODE
       ? canEditTargets
-        ? "点击右上角“获取最新数据”可载入最新 ERP 存档；月度目标可在当前浏览器填写保存。"
+        ? "点击右上角“获取最新数据”可载入最新 ERP 存档；月度目标可保存，群维护配置通过本机同步服务保存并发布。"
         : "点击右上角“获取最新数据”可检查并载入最新发布的 ERP 加密存档。"
       : "数据由本机 ERP 只读服务同步，当前链接不能连接、刷新或修改数据。";
   }
