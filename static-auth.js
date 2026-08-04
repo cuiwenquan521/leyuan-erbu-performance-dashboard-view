@@ -55,6 +55,14 @@
     return new Uint8Array(await new Response(stream).arrayBuffer());
   }
 
+  async function readEncryptedPayload(manifest, envelope) {
+    if (envelope.data) return decodeBase64(envelope.data);
+    if (!envelope.dataFile) throw new Error("加密存档文件无效");
+    const response = await nativeFetch(`./${encodeURIComponent(envelope.dataFile)}?v=${encodeURIComponent(manifest.generatedAt)}`, { cache: "no-store" });
+    if (!response.ok) throw new Error("账号加密数据读取失败");
+    return decodeBase64((await response.text()).trim());
+  }
+
   async function decryptEnvelope(manifest, envelope, password) {
     const material = await crypto.subtle.importKey(
       "raw",
@@ -72,7 +80,7 @@
     const decrypted = await crypto.subtle.decrypt({
       name: "AES-GCM",
       iv: decodeBase64(envelope.iv),
-    }, key, decodeBase64(envelope.data));
+    }, key, await readEncryptedPayload(manifest, envelope));
     const plain = await decompressPayload(new Uint8Array(decrypted), manifest.compression);
     return JSON.parse(new TextDecoder().decode(plain));
   }
