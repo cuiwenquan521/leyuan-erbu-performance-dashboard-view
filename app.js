@@ -807,6 +807,11 @@ function renderGroupAnalysis() {
   const selectedPrefix = elements.groupPrefixFilter.value;
   const groupNumbers = allGroupNumbers.filter(groupNumber => matchesGroupPrefix(groupNumber, selectedPrefix));
   const visibleOrders = orders.filter(order => matchesGroupPrefix(order.groupNumber, selectedPrefix));
+  const ordersByGroup = new Map();
+  orders.forEach(order => {
+    if (!ordersByGroup.has(order.groupNumber)) ordersByGroup.set(order.groupNumber, []);
+    ordersByGroup.get(order.groupNumber).push(order);
+  });
   const latestEmployee = new Map();
   [...orders].sort((a, b) => normalizeTime(a.orderTime).localeCompare(normalizeTime(b.orderTime))).forEach(order => latestEmployee.set(order.groupNumber, order.employeeName));
   const staffNames = [...new Set([...(monthlyReport?.staff || []).map(person => person.name), ...STAFF_ROSTER.map(person => person.name)])].filter(Boolean).sort((a, b) => a.localeCompare(b, "zh-CN"));
@@ -817,7 +822,7 @@ function renderGroupAnalysis() {
   elements.groupConfigValueLabel.textContent = `${rangeLabel}群产值`;
   elements.groupAssignmentBody.innerHTML = groupNumbers.map(groupNumber => {
     const setting = saved.get(groupNumber) || { groupNumber, employeeName: latestEmployee.get(groupNumber) || "", startAt: "", memberCount: 0 };
-    const groupOrders = orders.filter(order => order.groupNumber === groupNumber && (!setting.startAt || normalizeTime(order.orderTime) >= normalizeTime(setting.startAt)));
+    const groupOrders = (ordersByGroup.get(groupNumber) || []).filter(order => !setting.startAt || normalizeTime(order.orderTime) >= normalizeTime(setting.startAt));
     const value = groupOrders.reduce((sum, order) => sum + groupOrderNet(order), 0);
     const choices = [...new Set([...staffNames, setting.employeeName].filter(Boolean))].map(name => `<option value="${escapeHtml(name)}"${name === setting.employeeName ? " selected" : ""}>${escapeHtml(name)}${!staffNames.includes(name) ? "（历史人员）" : ""}</option>`).join("");
     const memberCount = Math.max(0, Math.trunc(amount(setting.memberCount)));
