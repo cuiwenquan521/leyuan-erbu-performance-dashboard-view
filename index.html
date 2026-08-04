@@ -186,7 +186,7 @@
           </div>
           <div class="group-toolbar">
             <div class="field-group compact-field"><label for="groupMonth">分析月份</label><input id="groupMonth" type="month" /></div>
-            <div class="field-group compact-field"><label for="groupPrefixFilter">群号分类</label><select id="groupPrefixFilter"><option value="">全部群号</option></select></div>
+            <div class="field-group compact-field"><label for="groupPrefixFilter">群号分类</label><input id="groupPrefixFilter" type="search" list="groupPrefixOptions" placeholder="如 AA 或 A*" autocomplete="off" title="可选择两位群号前缀，或输入 A* 等自定义前缀" /><datalist id="groupPrefixOptions"><option value="">全部群号</option></datalist></div>
             <button id="syncGroupOrders" class="button" type="button">↻ 同步订单管理</button>
             <button id="saveGroupAssignments" class="button primary" type="button">保存群号、人数与接群时间</button>
             <div class="group-range-row">

@@ -668,10 +668,19 @@ function groupOrderNet(order) {
   return amount(order.sellerReceivable) - amount(order.refundAmount);
 }
 
+function normalizeGroupPrefix(prefix) {
+  const value = String(prefix || "").trim().toUpperCase().replace(/\s+/g, "");
+  if (!value || value === "*" || value === "全部群号") return "";
+  if (value === "其他") return value;
+  return value.replace(/\*+$/, "");
+}
+
 function matchesGroupPrefix(groupNumber, prefix) {
-  if (!prefix) return true;
-  if (prefix === "其他") return !/^[A-Z]/.test(groupNumber);
-  return groupNumber.startsWith(prefix);
+  const normalizedPrefix = normalizeGroupPrefix(prefix);
+  const normalizedGroup = String(groupNumber || "").trim().toUpperCase();
+  if (!normalizedPrefix) return true;
+  if (normalizedPrefix === "其他") return !/^[A-Z]/.test(normalizedGroup);
+  return normalizedGroup.startsWith(normalizedPrefix);
 }
 
 function groupMonthSequence(startMonth, endMonth) {
@@ -800,11 +809,12 @@ function renderGroupAnalysis() {
   const saved = new Map((groupAssignments.assignments || []).map(item => [item.groupNumber, item]));
   const discovered = [...new Set(orders.map(order => order.groupNumber).filter(Boolean))];
   const allGroupNumbers = [...new Set([...saved.keys(), ...discovered])].sort((a, b) => a.localeCompare(b, "zh-CN"));
-  const prefixes = [...new Set(allGroupNumbers.map(groupNumber => groupNumber.match(/^[A-Z]/)?.[0] || "其他"))].sort((a, b) => a.localeCompare(b, "zh-CN"));
+  const prefixes = [...new Set(allGroupNumbers.map(groupNumber => groupNumber.match(/^[A-Z]{2}/)?.[0] || groupNumber.match(/^[A-Z]/)?.[0] || "其他"))].sort((a, b) => a.localeCompare(b, "zh-CN"));
   const previousPrefix = elements.groupPrefixFilter.value;
-  elements.groupPrefixFilter.innerHTML = '<option value="">全部群号</option>' + prefixes.map(prefix => `<option value="${escapeHtml(prefix)}">${escapeHtml(prefix)} 开头</option>`).join("");
-  elements.groupPrefixFilter.value = prefixes.includes(previousPrefix) ? previousPrefix : "";
-  const selectedPrefix = elements.groupPrefixFilter.value;
+  const prefixOptions = document.querySelector("#groupPrefixOptions");
+  if (prefixOptions) prefixOptions.innerHTML = '<option value="">全部群号</option>' + prefixes.map(prefix => `<option value="${escapeHtml(prefix)}">${escapeHtml(prefix)} 开头</option>`).join("");
+  elements.groupPrefixFilter.value = previousPrefix;
+  const selectedPrefix = normalizeGroupPrefix(previousPrefix);
   const groupNumbers = allGroupNumbers.filter(groupNumber => matchesGroupPrefix(groupNumber, selectedPrefix));
   const visibleOrders = orders.filter(order => matchesGroupPrefix(order.groupNumber, selectedPrefix));
   const ordersByGroup = new Map();
@@ -1474,6 +1484,11 @@ elements.groupMonth.addEventListener("change", () => {
   loadGroupAnalysis();
 });
 elements.groupPrefixFilter.addEventListener("change", renderGroupAnalysis);
+elements.groupPrefixFilter.addEventListener("keydown", event => {
+  if (event.key !== "Enter") return;
+  event.preventDefault();
+  renderGroupAnalysis();
+});
 elements.applyGroupRange.addEventListener("click", applyGroupRange);
 elements.useGroupJoinMonth.addEventListener("click", applyGroupJoinRange);
 elements.syncGroupRange.addEventListener("click", syncGroupRangeData);
