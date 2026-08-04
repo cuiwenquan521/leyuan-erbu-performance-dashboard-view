@@ -1,332 +1,337 @@
-(() => {
-  const nativeFetch = window.fetch.bind(window);
-  const CLOUD_TARGETS_KEY = "leyuan-cloud-targets-v1";
-  const CLOUD_SESSION_KEY = "leyuan-cloud-session-v1";
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light" />
+    <link rel="icon" type="image/svg+xml" sizes="any" href="./favicon.svg?v=1" />
+    <link rel="shortcut icon" href="./favicon.svg?v=1" />
+    <title>订单业绩分析</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header class="app-header">
+      <div class="brand-block">
+        <div class="brand-mark" aria-hidden="true">绩</div>
+        <div>
+          <h1>乐源二部订单业绩分析</h1>
+          <p>订单、产品与人员经营数据</p>
+        </div>
+      </div>
+      <div class="status-line">
+        <span id="sourceBadge" class="source-badge demo">演示数据</span>
+        <span id="lastUpdated">尚未同步</span>
+      </div>
+    </header>
 
-  function readCloudSession() {
-    try {
-      const session = JSON.parse(sessionStorage.getItem(CLOUD_SESSION_KEY) || "null");
-      return session?.username && session?.password ? session : null;
-    } catch {
-      return null;
-    }
-  }
+    <main>
+      <section class="toolbar" aria-label="统计控制">
+        <div class="field-group">
+          <label for="reportDate">统计日期</label>
+          <input id="reportDate" type="date" />
+        </div>
+        <div class="time-window">
+          <span>统计时段</span>
+          <strong id="windowLabel">00:00-18:00</strong>
+        </div>
+        <div class="toolbar-actions">
+          <button id="connectButton" class="button secondary" type="button" title="打开只读 ERP 登录窗口">
+            <span aria-hidden="true">▣</span> 连接 ERP
+          </button>
+          <button id="refreshButton" class="button primary" type="button" title="立即从 ERP 个人业绩流水读取最新数据">
+            <span class="refresh-icon" aria-hidden="true">↻</span> 立即同步 ERP
+          </button>
+        </div>
+      </section>
 
-  function saveCloudSession(session) {
-    sessionStorage.setItem(CLOUD_SESSION_KEY, JSON.stringify(session));
-  }
+      <section id="notice" class="notice" aria-live="polite">
+        <div>
+          <strong id="noticeTitle">当前未连接 ERP</strong>
+          <span id="noticeText">登录后仅查询个人业绩流水，成功刷新会保存当日档案。</span>
+        </div>
+        <span class="readonly-mark">只读保护</span>
+      </section>
 
-  function clearCloudSession() {
-    sessionStorage.removeItem(CLOUD_SESSION_KEY);
-  }
+      <div class="view-layout">
+      <nav class="view-tabs" aria-label="数据视图">
+        <button class="tab active" type="button" data-view="overview">当日汇总</button>
+        <button class="tab" type="button" data-view="staff">员工对比</button>
+        <button class="tab" type="button" data-view="monthly">月度汇总</button>
+        <button class="tab" type="button" data-view="products">产品分析</button>
+        <button class="tab" type="button" data-view="archives">每日存档</button>
+        <button class="tab" type="button" data-view="annual">年度业绩</button>
+      </nav>
 
-  function readLocalTargets() {
-    try {
-      const value = JSON.parse(localStorage.getItem(CLOUD_TARGETS_KEY) || "{}");
-      return value && typeof value === "object" ? value : {};
-    } catch {
-      return {};
-    }
-  }
+      <section id="overviewView" class="view active">
+        <div class="metric-grid" aria-label="当日汇总">
+          <article class="metric">
+            <span>服务人员</span>
+            <strong id="staffCount">0</strong>
+            <small>有订单记录</small>
+          </article>
+          <article class="metric">
+            <span>订单个数</span>
+            <strong id="orderCount">0</strong>
+            <small>按订单号去重</small>
+          </article>
+          <article class="metric">
+            <span>业绩总和</span>
+            <strong id="grossPerformance">¥0.00</strong>
+            <small>正向业绩流水</small>
+          </article>
+          <article class="metric refund">
+            <span>退款金额</span>
+            <strong id="refundTotal">¥0.00</strong>
+            <small>订单退款金额</small>
+          </article>
+          <article class="metric net">
+            <span>净业绩</span>
+            <strong id="netPerformance">¥0.00</strong>
+            <small>业绩减退款</small>
+          </article>
+        </div>
 
-  function normalizeTargetPayload(value) {
-    const staffTargets = {};
-    Object.entries(value?.staffTargets || {}).forEach(([name, target]) => {
-      const amount = Math.max(0, Number(target) || 0);
-      staffTargets[String(name)] = amount;
-    });
-    return {
-      teamTarget: Math.max(0, Number(value?.teamTarget) || 0),
-      staffTargets,
-    };
-  }
+        <section class="data-section">
+          <div class="section-heading">
+            <div>
+              <h2 id="reportTitle">人员明细</h2>
+              <p id="reportSubtitle"></p>
+            </div>
+            <span id="archiveState" class="section-status">未存档</span>
+          </div>
+          <div class="table-wrap">
+            <table class="staff-table">
+              <thead>
+                <tr>
+                  <th>服务人员</th>
+                  <th class="number">订单个数</th>
+                  <th class="number">产品件数</th>
+                  <th>中文产品 / 产品净值</th>
+                  <th class="number">业绩总和</th>
+                  <th class="number">退款金额</th>
+                  <th class="number">净业绩</th>
+                </tr>
+              </thead>
+              <tbody id="reportBody"></tbody>
+            </table>
+            <div id="emptyState" class="empty-state" hidden>
+              <div class="empty-icon" aria-hidden="true">日</div>
+              <strong>该统计时段暂无订单</strong>
+              <span>可选择历史存档日期或手动刷新 ERP 数据。</span>
+            </div>
+          </div>
+        </section>
+      </section>
 
-  function decodeBase64(value) {
-    const binary = atob(value);
-    return Uint8Array.from(binary, character => character.charCodeAt(0));
-  }
+      <section id="productsView" class="view">
+        <div class="analysis-strip">
+          <div><span>产品种类</span><strong id="productKinds">0</strong></div>
+          <div><span>产品净值均值</span><strong id="productNetAverage">¥0.00</strong></div>
+          <div><span>重点方向</span><strong id="focusProductCount">0</strong></div>
+          <div><span>整体退款率</span><strong id="overallRefundRate">0.0%</strong></div>
+        </div>
+        <section class="data-section">
+          <div class="section-heading">
+            <div><h2>产品净值分析</h2><p>重点方向结合净值与订单量；低于均值展示可验证的数据原因</p></div>
+            <span id="allocationState" class="section-status">订单净值按件数分摊</span>
+          </div>
+          <div class="table-wrap">
+            <table class="product-table">
+              <thead><tr><th>中文产品名称</th><th class="number">订单数</th><th class="number">件数</th><th class="number">业绩</th><th class="number">退款</th><th class="number">产品净值</th><th>分析结论</th></tr></thead>
+              <tbody id="productBody"></tbody>
+            </table>
+          </div>
+        </section>
+      </section>
 
-  async function decryptEnvelope(manifest, envelope, password) {
-    const material = await crypto.subtle.importKey(
-      "raw",
-      new TextEncoder().encode(password),
-      "PBKDF2",
-      false,
-      ["deriveKey"],
-    );
-    const key = await crypto.subtle.deriveKey({
-      name: "PBKDF2",
-      hash: "SHA-256",
-      salt: decodeBase64(envelope.salt),
-      iterations: manifest.iterations,
-    }, material, { name: "AES-GCM", length: 256 }, false, ["decrypt"]);
-    const plain = await crypto.subtle.decrypt({
-      name: "AES-GCM",
-      iv: decodeBase64(envelope.iv),
-    }, key, decodeBase64(envelope.data));
-    return JSON.parse(new TextDecoder().decode(plain));
-  }
+      <section id="staffView" class="view">
+        <div class="analysis-strip three">
+          <div><span>人员平均净业绩</span><strong id="staffNetAverage">¥0.00</strong></div>
+          <div><span>最高净业绩</span><strong id="topStaffNet">¥0.00</strong></div>
+          <div><span>团队单均净值</span><strong id="teamOrderAverage">¥0.00</strong></div>
+        </div>
+        <section class="data-section">
+          <div class="section-heading matrix-heading">
+            <div><h2>员工产品数据对比</h2><p>按完整月产品销量统计，姓名可打开产品业绩明细</p></div>
+            <div class="matrix-heading-meta">
+              <span id="staffAnalysisPeriod" class="section-status"></span>
+              <div class="matrix-legend" aria-label="颜色说明"><span><i class="legend-swatch below"></i>低于均值</span><span><i class="legend-swatch leader"></i>单品第一</span></div>
+            </div>
+          </div>
+          <div id="staffComparison" class="staff-matrix-wrap"></div>
+        </section>
 
-  function jsonResponse(body, status = 200) {
-    return new Response(JSON.stringify(body), {
-      status,
-      headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" },
-    });
-  }
+        <section class="data-section phase-table-section staff-phase-table-section">
+          <div class="section-heading">
+            <div><h2>员工阶段业绩表</h2><p>左侧为月度完成情况，右侧按统计日展示业绩和单量</p></div>
+            <span id="phaseArchiveCount" class="section-status">0 个统计日</span>
+          </div>
+          <div class="table-wrap phase-table-wrap">
+            <table class="phase-table">
+              <thead id="phaseTableHead"></thead>
+              <tbody id="phaseTableBody"></tbody>
+              <tfoot id="phaseTableFoot"></tfoot>
+            </table>
+          </div>
+        </section>
 
-  function installStaticApi(payload, role) {
-    window.STATIC_ARCHIVE_MODE = true;
-    window.STATIC_USER_ROLE = role;
-    window.STATIC_DEFAULT_DATE = payload.latestDate;
-    payload.targets = { ...(payload.targets || {}), ...readLocalTargets() };
-    window.fetch = async (input, options = {}) => {
-      const requestUrl = typeof input === "string" ? input : input.url;
-      const url = new URL(requestUrl, window.location.href);
-      if (!url.pathname.startsWith("/api/")) return nativeFetch(input, options);
-      const method = String(options.method || "GET").toUpperCase();
-      if (url.pathname === "/api/targets" && method === "POST") {
-        if (role !== "admin") return jsonResponse({ message: "查看账号不能修改目标" }, 403);
-        try {
-          const request = typeof options.body === "string" ? JSON.parse(options.body) : options.body;
-          const month = String(request?.month || "");
-          if (!/^\d{4}-\d{2}$/.test(month)) return jsonResponse({ message: "目标月份无效" }, 400);
-          const target = normalizeTargetPayload(request);
-          const localTargets = readLocalTargets();
-          localTargets[month] = target;
-          localStorage.setItem(CLOUD_TARGETS_KEY, JSON.stringify(localTargets));
-          payload.targets[month] = target;
-          return jsonResponse(target);
-        } catch {
-          return jsonResponse({ message: "目标数据无效" }, 400);
-        }
-      }
-      if (method !== "GET") return jsonResponse({ message: "云端存档仅允许查看" }, 403);
-      if (url.pathname === "/api/status") {
-        return jsonResponse({ ...payload.status, publicViewOnly: true, publicRole: role });
-      }
-      if (url.pathname === "/api/report-settings") return jsonResponse(payload.reportSettings);
-      if (url.pathname === "/api/group-assignments") return jsonResponse(payload.groupAssignments || { assignments: [] });
-      if (url.pathname === "/api/group-orders") {
-        const month = url.searchParams.get("month") || "";
-        return jsonResponse(payload.groupOrders?.[month] || { month, source: "尚未同步", updatedAt: "", count: 0, orders: [] });
-      }
-      if (url.pathname === "/api/annual-performance") {
-        const year = url.searchParams.get("year") || "";
-        return jsonResponse(payload.annualPerformance?.[year] || { year: Number(year), source: "尚未同步", updatedAt: "", activeEmployees: [], months: {} });
-      }
-      if (url.pathname === "/api/archives") return jsonResponse({ archives: payload.archivesMeta });
-      if (url.pathname === "/api/targets") {
-        const month = url.searchParams.get("month") || "";
-        return jsonResponse(payload.targets[month] || { teamTarget: 0, staffTargets: {} });
-      }
-      if (url.pathname.startsWith("/api/archive/")) {
-        const date = decodeURIComponent(url.pathname.slice("/api/archive/".length));
-        return payload.archives[date]
-          ? jsonResponse(payload.archives[date])
-          : jsonResponse({ message: "未找到该日期档案" }, 404);
-      }
-      return jsonResponse({ message: "接口不可用" }, 404);
-    };
-  }
+        <section class="data-section group-analysis-section">
+          <div class="section-heading group-analysis-heading">
+            <div><h2>员工群产值对比分析</h2><p>从 ERP 订单管理读取客户微信群；可按单月或自定义累计区间统计群实收净值与单品开发情况</p></div>
+            <span id="groupDataState" class="section-status">尚未载入订单管理数据</span>
+          </div>
+          <div class="group-toolbar">
+            <div class="field-group compact-field"><label for="groupMonth">分析月份</label><input id="groupMonth" type="month" /></div>
+            <button id="syncGroupOrders" class="button" type="button">↻ 同步订单管理</button>
+            <button id="saveGroupAssignments" class="button primary" type="button">保存群号与接群时间</button>
+            <div class="group-range-row">
+              <strong>自定义累计月份</strong>
+              <div class="field-group compact-field"><label for="groupStartMonth">开始月份</label><input id="groupStartMonth" type="month" /></div>
+              <span class="group-range-separator">至</span>
+              <div class="field-group compact-field"><label for="groupEndMonth">结束月份</label><input id="groupEndMonth" type="month" /></div>
+              <button id="applyGroupRange" class="button" type="button">查看累计</button>
+              <button id="useGroupJoinMonth" class="button" type="button">按接群时间累计</button>
+              <button id="syncGroupRange" class="button primary" type="button">↻ 同步累计区间</button>
+            </div>
+            <p>每个群只计算其接群时间之后的数据；累计区间最多 12 个月，员工查看账号只能查看。</p>
+          </div>
+          <datalist id="groupStaffNames"></datalist>
+          <div class="table-wrap group-config-wrap">
+            <table class="group-config-table">
+              <thead><tr><th>员工姓名</th><th>客户微信群号</th><th>接群时间</th><th id="groupConfigOrdersLabel" class="number">该月订单</th><th id="groupConfigValueLabel" class="number">该月群产值</th></tr></thead>
+              <tbody id="groupAssignmentBody"></tbody>
+            </table>
+          </div>
+          <div class="analysis-strip four group-metrics">
+            <div><span>已配置群数</span><strong id="configuredGroupCount">0</strong></div>
+            <div><span>群总产值</span><strong id="groupTotalValue">¥0.00</strong></div>
+            <div><span>群产值均值</span><strong id="groupAverageValue">¥0.00</strong></div>
+            <div><span>群订单均值</span><strong id="groupAverageOrders">0</strong></div>
+          </div>
+          <div id="groupComparison" class="group-comparison"></div>
+        </section>
+      </section>
 
-  function installCloudRefresh(session) {
-    const actions = document.querySelector(".toolbar-actions");
-    if (!actions || actions.querySelector(".cloud-refresh-button")) return;
-    const style = document.createElement("style");
-    style.textContent = `
-      .public-view-only .toolbar-actions{display:flex}
-      .public-view-only .toolbar-actions>.button:not(.cloud-refresh-button):not(.local-erp-button){display:none}
-    `;
-    document.head.appendChild(style);
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "button primary cloud-refresh-button";
-    button.title = "载入最近一次后台 ERP 同步后发布的云端数据";
-    button.innerHTML = '<span class="refresh-icon" aria-hidden="true">↻</span> 获取最新数据';
+      <section id="monthlyView" class="view">
+        <section class="monthly-toolbar">
+          <div class="field-group">
+            <label for="reportMonth">汇总月份</label>
+            <input id="reportMonth" type="month" />
+          </div>
+          <div class="target-control">
+            <label for="teamTarget">团队月度业绩目标</label>
+            <div><span>¥</span><input id="teamTarget" type="number" min="0" step="1000" value="0" /></div>
+          </div>
+          <button id="saveTargets" class="button primary" type="button">保存业绩目标</button>
+        </section>
 
-    function updateCheckTime() {
-      const label = document.querySelector("#lastUpdated");
-      if (!label) return;
-      const erpTime = label.textContent.split(" · 页面检查：")[0];
-      const checkedAt = new Date().toLocaleString("zh-CN", { hour12: false });
-      label.textContent = `${erpTime} · 页面检查：${checkedAt}`;
-    }
+        <div class="metric-grid monthly-metrics" aria-label="整月汇总">
+          <article class="metric"><span>整月业绩</span><strong id="monthlyGross">¥0.00</strong><small>已存档统计日合计</small></article>
+          <article class="metric"><span>整月净业绩</span><strong id="monthlyNet">¥0.00</strong><small>业绩减退款</small></article>
+          <article class="metric"><span>团队目标</span><strong id="monthlyTarget">¥0.00</strong><small>可在上方填写</small></article>
+          <article class="metric net"><span>目标完成率</span><strong id="monthlyCompletion">0.0%</strong><small>净业绩 ÷ 团队目标</small></article>
+          <article class="metric"><span>订单 / 产品</span><strong id="monthlyOrdersProducts">0 / 0</strong><small>去重订单 / 销售件数</small></article>
+        </div>
 
-    async function loadLatest(notify = true) {
-      const response = await nativeFetch(`./encrypted-data.json?t=${Date.now()}`, { cache: "no-store" });
-      if (!response.ok) throw new Error("云端数据读取失败");
-      const nextManifest = await response.json();
-      updateCheckTime();
-      if (nextManifest.generatedAt === session.generatedAt) {
-        if (notify && typeof window.showToast === "function") window.showToast("已检查：当前已是最新云端数据；ERP 数据时间未变化");
-        return false;
-      }
-      const envelope = nextManifest.envelopes.find(item => item.username === session.username);
-      if (!envelope) throw new Error("账号已失效，请重新登录");
-      const payload = await decryptEnvelope(nextManifest, envelope, session.password);
-      installStaticApi(payload, envelope.role);
-      session.generatedAt = nextManifest.generatedAt;
-      saveCloudSession(session);
-      if (typeof window.initialize === "function") await window.initialize();
-      updateCheckTime();
-      if (notify && typeof window.showToast === "function") window.showToast("最新云端数据已载入");
-      return true;
-    }
+        <section class="data-section">
+          <div class="section-heading"><div><h2>个人业绩目标</h2><p>填写每位员工当月目标，保存后用于完成率排名</p></div><span id="monthlyArchiveCount" class="section-status">0 个统计日</span></div>
+          <div class="table-wrap">
+            <table class="monthly-target-table">
+              <colgroup><col /><col /><col /><col /><col /><col /></colgroup>
+              <thead><tr><th>员工</th><th>部门</th><th class="number">订单数</th><th class="number">净业绩</th><th class="number">个人目标</th><th class="number">完成率</th></tr></thead>
+              <tbody id="monthlyTargetBody"></tbody>
+            </table>
+          </div>
+        </section>
 
-    button.addEventListener("click", async () => {
-      button.disabled = true;
-      button.classList.add("is-refreshing");
-      try {
-        await loadLatest(true);
-      } catch (refreshError) {
-        if (typeof window.showToast === "function") window.showToast(refreshError.message || "刷新失败，请稍后重试");
-      } finally {
-        button.disabled = false;
-        button.classList.remove("is-refreshing");
-      }
-    });
-    if (session.role === "admin") {
-      const connect = document.createElement("a");
-      connect.className = "button local-erp-button";
-      connect.href = "http://127.0.0.1:8765/?connect=1&bridge=1";
-      connect.target = "_blank";
-      connect.title = "在办公电脑打开本机页面并连接 ERP";
-      connect.textContent = "▣ 连接 ERP";
-      const sync = document.createElement("a");
-      sync.className = "button primary local-erp-button";
-      sync.href = "http://127.0.0.1:8765/?sync=1&bridge=1";
-      sync.target = "_blank";
-      sync.title = "在办公电脑立即读取 ERP 个人业绩流水";
-      sync.textContent = "↻ 立即同步 ERP";
-      actions.append(connect, sync);
-    }
-    actions.appendChild(button);
+        <section class="data-section">
+          <div class="section-heading monthly-ranking-heading">
+            <div><h2>月度数据排名</h2><p id="monthlyRankingSubtitle">按员工净业绩从高到低</p></div>
+            <div class="rank-tabs" aria-label="月度排名视图">
+              <button class="rank-tab active" type="button" data-rank="performance">业绩排名</button>
+              <button class="rank-tab" type="button" data-rank="completion">完成率排名</button>
+              <button class="rank-tab" type="button" data-rank="products">单品销量</button>
+              <button class="rank-tab" type="button" data-rank="departments">部门单品排名</button>
+            </div>
+          </div>
+          <div class="table-wrap"><table id="monthlyRankingTable" class="monthly-ranking-table"><thead id="monthlyRankingHead"></thead><tbody id="monthlyRankingBody"></tbody></table></div>
+        </section>
+      </section>
 
-    if (!window.__LEYUAN_ERP_BRIDGE_LISTENER__) {
-      window.__LEYUAN_ERP_BRIDGE_LISTENER__ = true;
-      window.addEventListener("message", async event => {
-        if (event.origin !== "http://127.0.0.1:8765" || !event.data?.type?.startsWith("leyuan-erp-")) return;
-        if (event.data.type === "leyuan-erp-connect-complete") {
-          if (typeof window.showToast === "function") window.showToast(event.data.connected ? "ERP 已连接" : "ERP 登录窗口已打开，请完成登录后再同步");
-          return;
-        }
-        if (event.data.type === "leyuan-erp-sync-error") {
-          if (typeof window.showToast === "function") window.showToast(event.data.message || "ERP 同步失败");
-          return;
-        }
-        button.disabled = true;
-        button.classList.add("is-refreshing");
-        try {
-          const deadline = Date.now() + 90_000;
-          while (Date.now() < deadline) {
-            if (await loadLatest(false)) {
-              if (typeof window.showToast === "function") window.showToast("ERP 已同步，最新数据已载入");
-              return;
-            }
-            await new Promise(resolve => setTimeout(resolve, 2000));
-          }
-          throw new Error("ERP 已同步，但云端页面尚未更新，请稍后点击“获取最新数据”");
-        } catch (error) {
-          if (typeof window.showToast === "function") window.showToast(error.message || "最新数据载入失败");
-        } finally {
-          button.disabled = false;
-          button.classList.remove("is-refreshing");
-        }
-      });
-    }
-    setInterval(() => {
-      if (button.disabled) return;
-      loadLatest(false).catch(() => {});
-    }, 60_000);
-  }
+      <section id="phasesView" class="view">
+        <section class="phase-toolbar">
+          <div class="field-group">
+            <label for="phaseMonth">统计月份</label>
+            <input id="phaseMonth" type="month" />
+          </div>
+          <div class="field-group compact-field">
+            <label for="firstDayStart">每月 1 日开始</label>
+            <input id="firstDayStart" type="time" value="00:00" />
+          </div>
+          <div class="field-group compact-field">
+            <label for="cutoffTime">每日阶段截止</label>
+            <input id="cutoffTime" type="time" value="18:00" />
+          </div>
+          <button id="savePhaseSettings" class="button primary" type="button">保存时间设置</button>
+          <p id="phaseWindowHint">1 日 00:00 → 18:00；之后每日 18:00 → 18:00</p>
+        </section>
 
-  async function completeLogin(manifest, envelope, password, overlay) {
-    const payload = await decryptEnvelope(manifest, envelope, password);
-    installStaticApi(payload, envelope.role);
-    const session = { username: envelope.username, password, role: envelope.role, generatedAt: manifest.generatedAt };
-    saveCloudSession(session);
-    overlay.remove();
-    const script = document.createElement("script");
-    script.src = `./app.js?v=${encodeURIComponent(manifest.generatedAt)}`;
-    script.addEventListener("load", () => installCloudRefresh(session));
-    document.body.appendChild(script);
-  }
+        <section class="data-section trend-section">
+          <div class="section-heading">
+            <div><h2>月度业绩波浪趋势</h2><p>按每日存档的净业绩绘制，峰值为当前月份最高统计日</p></div>
+            <div class="trend-summary"><span>峰值</span><strong id="phasePeak">¥0.00</strong><small id="phasePeakDate">暂无数据</small></div>
+          </div>
+          <div id="phaseChart" class="phase-chart" aria-label="月度业绩趋势图"></div>
+        </section>
 
-  function createLogin() {
-    const overlay = document.createElement("div");
-    overlay.className = "cloud-login";
-    overlay.innerHTML = `
-      <form class="cloud-login-panel">
-        <div class="cloud-login-mark">绩</div>
-        <h1>乐源二部</h1>
-        <p>订单业绩分析</p>
-        <label>账号<input name="username" autocomplete="username" required /></label>
-        <label>密码<input name="password" type="password" autocomplete="current-password" required /></label>
-        <div class="cloud-login-error" role="alert"></div>
-        <button type="submit" disabled>登录</button>
-      </form>`;
-    const style = document.createElement("style");
-    style.textContent = `
-      .cloud-login{position:fixed;inset:0;z-index:10000;display:grid;place-items:center;background:#eef2f5;padding:20px;font-family:"Microsoft YaHei",sans-serif}
-      .cloud-login-panel{width:min(360px,100%);background:#fff;border:1px solid #ccd6df;border-radius:8px;padding:30px;box-shadow:0 18px 50px rgba(25,45,60,.16)}
-      .cloud-login-mark{width:46px;height:46px;display:grid;place-items:center;margin:0 auto 14px;background:#126b58;color:#fff;border-radius:6px;font-size:23px;font-weight:800}
-      .cloud-login h1{margin:0;text-align:center;font-size:26px;color:#1f2d38}.cloud-login p{margin:6px 0 24px;text-align:center;color:#667786}
-      .cloud-login label{display:block;margin:14px 0 6px;color:#344553;font-weight:700;font-size:14px}
-      .cloud-login input{box-sizing:border-box;width:100%;height:42px;margin-top:7px;border:1px solid #b9c7d1;border-radius:5px;padding:0 11px;font:inherit;font-weight:400}
-      .cloud-login input:focus{outline:2px solid #99cfc2;border-color:#126b58}
-      .cloud-login button{width:100%;height:43px;margin-top:10px;border:0;border-radius:5px;background:#126b58;color:#fff;font-size:16px;font-weight:800;cursor:pointer}
-      .cloud-login button:disabled{opacity:.6;cursor:wait}.cloud-login-error{min-height:22px;color:#b4232d;font-size:13px;padding-top:6px}
-    `;
-    document.head.appendChild(style);
-    document.body.appendChild(overlay);
-    return overlay;
-  }
+      </section>
 
-  async function start() {
-    const overlay = createLogin();
-    const form = overlay.querySelector("form");
-    const error = overlay.querySelector(".cloud-login-error");
-    const button = overlay.querySelector("button");
-    let manifest = null;
+      <section id="archivesView" class="view">
+        <section class="data-section archive-section">
+          <div class="section-heading"><div><h2>每日数据存档</h2><p id="archiveScheduleDescription">每天 18:05 自动同步，也可手动刷新并覆盖该统计日的最新快照</p></div></div>
+          <div class="table-wrap">
+            <table class="archive-table">
+              <thead><tr><th>统计日期</th><th>统计时段</th><th>数据来源</th><th class="number">订单数量</th><th>存档时间</th><th class="action-column">操作</th></tr></thead>
+              <tbody id="archiveBody"></tbody>
+            </table>
+            <div id="archiveEmpty" class="empty-state" hidden><div class="empty-icon" aria-hidden="true">档</div><strong>暂无存档</strong><span>自动同步或第一次手动刷新后会生成。</span></div>
+          </div>
+        </section>
+      </section>
 
-    form.addEventListener("submit", async event => {
-      event.preventDefault();
-      if (!manifest) return;
-      error.textContent = "";
-      button.disabled = true;
-      const username = form.elements.username.value.trim();
-      const envelope = manifest.envelopes.find(item => item.username === username);
-      try {
-        if (!envelope) throw new Error("invalid");
-        await completeLogin(manifest, envelope, form.elements.password.value, overlay);
-      } catch {
-        clearCloudSession();
-        error.textContent = "账号或密码不正确";
-        button.disabled = false;
-        form.elements.password.select();
-      }
-    });
+      <section id="annualView" class="view">
+        <section class="annual-toolbar">
+          <div class="field-group compact-field"><label for="annualYear">统计年份</label><input id="annualYear" type="number" min="2020" max="2100" step="1" /></div>
+          <button id="syncAnnualPerformance" class="button primary" type="button">↻ 拉取年度业绩</button>
+          <p>逐月读取 ERP 个人业绩流水；当前工作台名单用于区分在岗与离职人员。</p>
+        </section>
+        <div class="analysis-strip four annual-metrics">
+          <div><span>年度总业绩</span><strong id="annualNet">¥0.00</strong></div>
+          <div><span>已统计月份</span><strong id="annualMonthCount">0</strong></div>
+          <div><span>当前在岗人数</span><strong id="annualActiveCount">0</strong></div>
+          <div><span>离职人员历史业绩</span><strong id="annualFormerNet">¥0.00</strong></div>
+        </div>
+        <section class="data-section annual-month-section">
+          <div class="section-heading"><div><h2>每月业绩汇总</h2><p>直接采用 ERP 工作台个人销售业绩排名金额，已包含退款等业绩调整；年度合计包含离职人员历史业绩</p></div><span id="annualDataState" class="section-status">尚未拉取年度数据</span></div>
+          <div class="table-wrap"><table class="annual-month-table"><thead><tr><th>月份</th><th class="number">月度业绩</th><th class="number">有业绩人员</th></tr></thead><tbody id="annualMonthBody"></tbody><tfoot id="annualMonthFoot"></tfoot></table></div>
+        </section>
+        <section class="data-section annual-staff-section">
+          <div class="section-heading annual-staff-heading">
+            <div><h2>人员年度业绩明细</h2><p>在岗人员默认显示；离职人员默认折叠，但始终计入每月和年度合计</p></div>
+            <button id="toggleFormerStaff" class="button secondary" type="button" aria-expanded="false">显示离职人员</button>
+          </div>
+          <div class="table-wrap annual-staff-wrap"><table class="annual-staff-table"><thead id="annualStaffHead"></thead><tbody id="annualStaffBody"></tbody><tfoot id="annualStaffFoot"></tfoot></table></div>
+        </section>
+      </section>
+      </div>
 
-    try {
-      const response = await nativeFetch("./encrypted-data.json", { cache: "no-store" });
-      manifest = await response.json();
-      const savedSession = readCloudSession();
-      if (savedSession) {
-        const envelope = manifest.envelopes.find(item => item.username === savedSession.username);
-        try {
-          if (!envelope) throw new Error("invalid");
-          await completeLogin(manifest, envelope, savedSession.password, overlay);
-          return;
-        } catch {
-          clearCloudSession();
-          error.textContent = "登录信息已更新，请重新输入账号密码";
-        }
-      }
-      button.disabled = false;
-    } catch {
-      error.textContent = "云端数据暂时无法读取";
-    }
-  }
+      <footer>
+        <span>只读查询，不调用新增、修改、删除、审核或调价接口。</span>
+        <span id="autoScheduleText">刷新方式：每天 18:05 自动同步 + 手动刷新</span>
+      </footer>
+    </main>
 
-  start();
-})();
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <script src="./static-auth.js"></script>
+  </body>
+</html>
