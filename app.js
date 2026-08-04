@@ -119,6 +119,7 @@ let reportSettings = { firstDayStart: "00:00", cutoffTime: "18:00", autoDelayMin
 let archivesMeta = [];
 let toastTimer;
 let lastObservedAutoSync = "";
+let partialSyncIntervalMinutes = 3;
 let publicViewOnly = false;
 
 function targetsEditable() {
@@ -517,9 +518,9 @@ function setConnection(connected) {
   elements.notice.classList.toggle("connected", connected);
   elements.noticeTitle.textContent = connected ? "ERP 已连接，只读保护生效" : "当前未连接 ERP";
   const schedule = scheduledSyncTime();
-  elements.noticeText.textContent = connected ? `每天 ${schedule} 自动同步并存档，也可随时手动刷新。` : `请保持 ERP 登录有效；每天 ${schedule} 将自动执行只读同步。`;
-  elements.autoScheduleText.textContent = `刷新方式：每天 ${schedule} 自动同步 + 手动刷新`;
-  elements.archiveScheduleDescription.textContent = `每天 ${schedule} 自动同步，也可手动刷新并覆盖该统计日的最新快照`;
+  elements.noticeText.textContent = connected ? `运行期间约每 ${partialSyncIntervalMinutes} 分钟补拉当前统计日；每天 ${schedule} 最终同步并存档，也可随时手动刷新。` : `请保持 ERP 登录有效；启动后约每 ${partialSyncIntervalMinutes} 分钟补拉，每天 ${schedule} 执行最终同步。`;
+  elements.autoScheduleText.textContent = `刷新方式：约每 ${partialSyncIntervalMinutes} 分钟自动补拉 + 每天 ${schedule} 最终同步 + 手动刷新`;
+  elements.archiveScheduleDescription.textContent = `约每 ${partialSyncIntervalMinutes} 分钟自动补拉；每天 ${schedule} 最终同步并覆盖该统计日最新快照`;
 }
 
 function setPublicViewOnly(enabled) {
@@ -549,8 +550,8 @@ function setPublicViewOnly(enabled) {
     elements.noticeTitle.textContent = window.STATIC_ARCHIVE_MODE ? "云端加密存档" : "公网只读查看";
     elements.noticeText.textContent = window.STATIC_ARCHIVE_MODE
       ? canEditTargets
-        ? "点击右上角“获取最新数据”可载入最新 ERP 存档；月度目标可保存，群维护配置通过本机同步服务保存并发布。"
-        : "点击右上角“获取最新数据”可检查并载入最新发布的 ERP 加密存档。"
+        ? "同步电脑约每 3 分钟发布最新 ERP 存档；点击右上角“获取最新数据”可立即检查，月度目标和群维护配置可按权限保存。"
+        : "同步电脑约每 3 分钟发布最新 ERP 加密存档；点击右上角“获取最新数据”可立即检查。"
       : "数据由本机 ERP 只读服务同步，当前链接不能连接、刷新或修改数据。";
   }
 }
@@ -578,6 +579,7 @@ async function fetchJson(url, options = {}) {
 async function checkStatus() {
   try {
     const status = await fetchJson("/api/status");
+    partialSyncIntervalMinutes = Number(status.autoSync?.partialIntervalMinutes) || partialSyncIntervalMinutes;
     setConnection(status.connected);
     setPublicViewOnly(status.publicViewOnly);
     return status;
@@ -599,7 +601,7 @@ async function watchScheduledSync() {
     if (syncDate === elements.date.value) {
       await openArchive(syncDate, { activate: false, notify: false });
       await loadMonthlyReport();
-      showToast("18:05 自动同步已完成，页面数据已更新");
+      showToast("ERP 自动补拉已完成，页面数据已更新");
     }
   } catch {}
 }
@@ -1335,7 +1337,7 @@ function renderPhaseReport() {
   elements.firstDayStart.value = reportSettings.firstDayStart;
   elements.cutoffTime.value = reportSettings.cutoffTime;
   elements.phaseWindowHint.textContent = `月初 ${reportSettings.firstDayStart} 起；周一统计周六至周一，周二至周六按日统计；每日 ${reportSettings.cutoffTime} 截止并于 ${reportSettings.autoDelayMinutes} 分钟后自动同步`;
-  elements.autoScheduleText.textContent = `刷新方式：每天 ${scheduledSyncTime()} 自动同步 + 手动刷新`;
+  elements.autoScheduleText.textContent = `刷新方式：约每 ${partialSyncIntervalMinutes} 分钟自动补拉 + 每天 ${scheduledSyncTime()} 最终同步 + 手动刷新`;
   elements.phaseArchiveCount.textContent = `${archiveReports.length} 个统计日存档`;
   renderPhaseChart();
 

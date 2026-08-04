@@ -31,7 +31,7 @@ button, input { font: inherit; }
 .source-badge { padding: 4px 8px; border: 1px solid #bdd7d0; border-radius: 4px; color: var(--primary); background: #eff8f5; }
 .source-badge.demo { color: #78591a; border-color: #dfcfaa; background: #fff8e8; }
 
-main { max-width: 1480px; margin: 0 auto; padding: 20px 26px 24px; }
+main { width: 100%; max-width: none; margin: 0; padding: 20px 26px 24px; }
 .toolbar { min-height: 68px; padding: 11px 15px; display: flex; align-items: end; gap: 20px; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; }
 .field-group { display: grid; gap: 6px; }
 .field-group label, .time-window span { color: var(--muted); font-size: 12px; }
