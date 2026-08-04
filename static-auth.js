@@ -132,59 +132,33 @@
     const button = document.createElement("button");
     button.type = "button";
     button.className = "button primary cloud-refresh-button";
-    button.title = "检查并载入最新发布的云端加密存档";
-    button.innerHTML = '<span class="refresh-icon" aria-hidden="true">↻</span> 实时刷新';
+    button.title = "载入最近一次后台 ERP 同步后发布的云端数据";
+    button.innerHTML = '<span class="refresh-icon" aria-hidden="true">↻</span> 获取最新数据';
+
+    async function loadLatest(notify = true) {
+      const response = await nativeFetch(`./encrypted-data.json?t=${Date.now()}`, { cache: "no-store" });
+      if (!response.ok) throw new Error("云端数据读取失败");
+      const nextManifest = await response.json();
+      if (nextManifest.generatedAt === session.generatedAt) {
+        if (notify && typeof window.showToast === "function") window.showToast("当前已是最新云端数据，以上方 ERP 同步时间为准");
+        return false;
+      }
+      const envelope = nextManifest.envelopes.find(item => item.username === session.username);
+      if (!envelope) throw new Error("账号已失效，请重新登录");
+      const payload = await decryptEnvelope(nextManifest, envelope, session.password);
+      installStaticApi(payload, envelope.role);
+      session.generatedAt = nextManifest.generatedAt;
+      saveCloudSession(session);
+      if (typeof window.initialize === "function") await window.initialize();
+      if (notify && typeof window.showToast === "function") window.showToast("最新云端数据已载入");
+      return true;
+    }
+
     button.addEventListener("click", async () => {
       button.disabled = true;
       button.classList.add("is-refreshing");
       try {
-        let localSyncTriggered = false;
-        if (window.location.hostname === "cuiwenquan521.github.io") {
-          const controller = new AbortController();
-          const timeout = setTimeout(() => controller.abort(), 5_000);
-          try {
-            const date = document.querySelector("#reportDate")?.value || "";
-            const localResponse = await nativeFetch("http://127.0.0.1:8765/api/sync", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ date }),
-              cache: "no-store",
-              signal: controller.signal,
-            });
-            if (localResponse.ok) {
-              localSyncTriggered = true;
-              if (typeof window.showToast === "function") window.showToast("ERP读取完成，正在更新云端数据");
-            }
-          } catch {}
-          finally { clearTimeout(timeout); }
-        }
-
-        const deadline = Date.now() + (localSyncTriggered ? 90_000 : 0);
-        let nextManifest;
-        do {
-          const response = await nativeFetch(`./encrypted-data.json?t=${Date.now()}`, { cache: "no-store" });
-          if (!response.ok) throw new Error("云端数据读取失败");
-          nextManifest = await response.json();
-          if (nextManifest.generatedAt !== session.generatedAt) break;
-          if (!localSyncTriggered || Date.now() >= deadline) break;
-          await new Promise(resolve => setTimeout(resolve, 3_000));
-        } while (true);
-
-        if (nextManifest.generatedAt === session.generatedAt) {
-          const message = localSyncTriggered
-            ? "ERP已读取，云端发布尚未完成，请稍后再点一次"
-            : "已读取最新云端数据；本机ERP将在后台定时同步";
-          if (typeof window.showToast === "function") window.showToast(message);
-          return;
-        }
-        const envelope = nextManifest.envelopes.find(item => item.username === session.username);
-        if (!envelope) throw new Error("账号已失效，请重新登录");
-        const payload = await decryptEnvelope(nextManifest, envelope, session.password);
-        installStaticApi(payload, envelope.role);
-        session.generatedAt = nextManifest.generatedAt;
-        saveCloudSession(session);
-        if (typeof window.initialize === "function") await window.initialize();
-        if (typeof window.showToast === "function") window.showToast(localSyncTriggered ? "ERP最新数据已同步" : "最新云端数据已载入");
+        await loadLatest(true);
       } catch (refreshError) {
         if (typeof window.showToast === "function") window.showToast(refreshError.message || "刷新失败，请稍后重试");
       } finally {
@@ -193,6 +167,10 @@
       }
     });
     actions.appendChild(button);
+    setInterval(() => {
+      if (button.disabled) return;
+      loadLatest(false).catch(() => {});
+    }, 60_000);
   }
 
   async function completeLogin(manifest, envelope, password, overlay) {
