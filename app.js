@@ -549,7 +549,7 @@ async function refreshErp() {
     render();
     await loadArchives();
     await loadMonthlyReport();
-    showToast(archive.warning || `已读取 ${archive.flowCount} 条流水，按订单号去重为 ${archive.orderCount} 单`);
+    showToast(archive.warning || `ERP同步完成：${formatDateTime(archive.updatedAt)}，读取 ${archive.flowCount} 条流水，按订单号去重为 ${archive.orderCount} 单`);
   } catch (error) {
     if (error.status === 401) setConnection(false);
     showToast(`刷新失败：${error.message}`);
