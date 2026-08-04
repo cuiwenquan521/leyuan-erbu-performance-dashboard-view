@@ -776,9 +776,7 @@ function renderAnnualPerformance() {
   const rows = buildAnnualStaffRows(report);
   const activeRows = rows.filter(person => person.active);
   const formerRows = rows.filter(person => !person.active);
-  const annualGross = availableMonths.reduce((sum, month) => sum + amount(report.months[month].gross), 0);
-  const annualRefund = availableMonths.reduce((sum, month) => sum + amount(report.months[month].refund), 0);
-  const annualNet = annualGross - annualRefund;
+  const annualNet = availableMonths.reduce((sum, month) => sum + amount(report.months[month].net), 0);
   const formerNet = formerRows.reduce((sum, person) => sum + person.total, 0);
   elements.annualNet.textContent = currency(annualNet);
   elements.annualMonthCount.textContent = availableMonths.length;
@@ -787,9 +785,9 @@ function renderAnnualPerformance() {
   elements.annualDataState.textContent = report.updatedAt ? `${report.year} 年 · ${formatDateTime(report.updatedAt)} · ${report.source}` : "尚未拉取年度数据";
   elements.annualMonthBody.innerHTML = monthKeys.map((month, index) => {
     const item = report.months?.[month];
-    return `<tr><td><strong>${index + 1} 月</strong></td><td class="number">${item ? currency(item.gross) : "-"}</td><td class="number refund-amount">${item ? currency(item.refund) : "-"}</td><td class="number net-amount">${item ? currency(item.net) : "-"}</td><td class="number">${item ? item.staff.length : "-"}</td></tr>`;
+    return `<tr><td><strong>${index + 1} 月</strong></td><td class="number net-amount">${item ? currency(item.net) : "-"}</td><td class="number">${item ? item.staff.length : "-"}</td></tr>`;
   }).join("");
-  elements.annualMonthFoot.innerHTML = `<tr><td><strong>年度汇总</strong></td><td class="number">${currency(annualGross)}</td><td class="number refund-amount">${currency(annualRefund)}</td><td class="number net-amount">${currency(annualNet)}</td><td class="number">${rows.length}</td></tr>`;
+  elements.annualMonthFoot.innerHTML = `<tr><td><strong>年度汇总（含离职）</strong></td><td class="number net-amount">${currency(annualNet)}</td><td class="number">${rows.length}</td></tr>`;
 
   elements.toggleFormerStaff.textContent = `${showFormerStaff ? "隐藏" : "显示"}离职人员（${formerRows.length}）`;
   elements.toggleFormerStaff.setAttribute("aria-expanded", String(showFormerStaff));
