@@ -473,7 +473,7 @@ function setSource(source, updatedAt) {
   const live = source.includes("ERP");
   elements.source.textContent = source;
   elements.source.classList.toggle("demo", !live);
-  elements.updated.textContent = updatedAt ? `数据时间：${formatDateTime(updatedAt)}` : "尚未同步";
+  elements.updated.textContent = updatedAt ? `ERP同步时间：${formatDateTime(updatedAt)}` : "尚未同步";
 }
 
 async function fetchJson(url, options = {}) {
@@ -953,7 +953,7 @@ async function openArchive(date, options = {}) {
     elements.notice.classList.add("connected");
     elements.noticeTitle.textContent = "正在查看 ERP 只读档案";
     elements.noticeText.textContent = window.STATIC_ARCHIVE_MODE
-      ? "当前显示云端加密存档；数据时间以上方标记为准。"
+      ? "当前显示云端加密存档；ERP同步时间以上方标记为准。"
       : `当前数据已在本机匿名化保存；每天 ${scheduledSyncTime()} 自动更新，也可手动刷新。`;
     render();
     if (options.activate !== false) activateView("overview");
