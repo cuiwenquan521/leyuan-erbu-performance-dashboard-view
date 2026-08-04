@@ -466,6 +466,9 @@ function setPublicViewOnly(enabled) {
   [elements.connect, elements.refresh, elements.savePhaseSettings].forEach(control => {
     if (control) control.hidden = publicViewOnly;
   });
+  [elements.syncGroupOrders, elements.saveGroupAssignments].forEach(control => {
+    if (control) control.hidden = publicViewOnly;
+  });
   if (elements.saveTargets) elements.saveTargets.hidden = publicViewOnly && !canEditTargets;
   if (elements.teamTarget) elements.teamTarget.disabled = !canEditTargets;
   document.querySelectorAll(".target-input").forEach(input => {
@@ -566,6 +569,8 @@ async function refreshErp() {
     render();
     await loadArchives();
     await loadMonthlyReport();
+    elements.groupMonth.value = date.slice(0, 7);
+    await loadGroupAnalysis();
     showToast(archive.warning || `ERP同步完成：${formatDateTime(archive.updatedAt)}，读取 ${archive.flowCount} 条流水，按订单号去重为 ${archive.orderCount} 单`);
   } catch (error) {
     if (error.status === 401) setConnection(false);
@@ -600,6 +605,7 @@ async function loadMonthlyReport() {
     monthlyReport.archiveCount = archives.length;
     renderMonthly();
     render();
+    if (elements.groupMonth.value === month) await loadGroupAnalysis();
   } catch (error) { showToast(`月度汇总失败：${error.message}`); }
 }
 
@@ -621,6 +627,159 @@ function renderMonthly() {
     return `<tr><td><div class="staff-cell"><span class="avatar">${escapeHtml(person.name.slice(0, 1))}</span>${escapeHtml(person.name)}</div></td><td>${escapeHtml(person.department)}</td><td class="number">${person.orderCount}</td><td class="number net-amount">${currency(person.net)}</td><td class="number target-cell"><input class="target-input" type="number" min="0" step="1000" data-target-staff="${escapeHtml(person.name)}" value="${target || ""}" placeholder="未设置" ${targetsEditable() ? "" : "disabled"} /></td><td class="number completion-value">${completion === null ? "未设置" : percent(completion)}</td></tr>`;
   }).join("");
   renderMonthlyRanking();
+}
+
+function groupOrderNet(order) {
+  return amount(order.sellerReceivable) - amount(order.refundAmount);
+}
+
+function buildGroupReport() {
+  const orders = Array.isArray(groupOrderSnapshot.orders) ? groupOrderSnapshot.orders : [];
+  const assignments = Array.isArray(groupAssignments.assignments) ? groupAssignments.assignments : [];
+  const configured = assignments.filter(item => item.groupNumber && item.employeeName && item.startAt);
+  const groups = configured.map(assignment => ({
+    ...assignment,
+    orders: new Set(),
+    value: 0,
+    products: new Map(),
+  }));
+  const byNumber = new Map(groups.map(group => [group.groupNumber, group]));
+  orders.forEach(order => {
+    const group = byNumber.get(order.groupNumber);
+    if (!group || normalizeTime(order.orderTime) < normalizeTime(group.startAt)) return;
+    const net = groupOrderNet(order);
+    group.orders.add(order.orderKey);
+    group.value += net;
+    const products = Array.isArray(order.products) ? order.products : [];
+    const totalWeight = products.reduce((sum, product) => sum + Math.max(0, amount(product.apportionedAmount)), 0)
+      || products.reduce((sum, product) => sum + Math.max(0, amount(product.quantity)), 0);
+    products.forEach(product => {
+      const weight = Math.max(0, amount(product.apportionedAmount)) || Math.max(0, amount(product.quantity));
+      const allocated = totalWeight ? net * weight / totalWeight : 0;
+      const item = group.products.get(product.name) || { name: product.name, quantity: 0, value: 0 };
+      item.quantity += Math.max(0, amount(product.quantity));
+      item.value += allocated;
+      group.products.set(product.name, item);
+    });
+  });
+  const total = groups.reduce((sum, group) => sum + group.value, 0);
+  const average = groups.length ? total / groups.length : 0;
+  const averageOrders = groups.length ? groups.reduce((sum, group) => sum + group.orders.size, 0) / groups.length : 0;
+  const productNames = [...new Set(groups.flatMap(group => [...group.products.keys()]))].sort((left, right) => {
+    const leftValue = groups.reduce((sum, group) => sum + (group.products.get(left)?.value || 0), 0);
+    const rightValue = groups.reduce((sum, group) => sum + (group.products.get(right)?.value || 0), 0);
+    return rightValue - leftValue || left.localeCompare(right, "zh-CN");
+  });
+  const productStats = new Map(productNames.map(name => {
+    const values = groups.map(group => group.products.get(name)?.value || 0);
+    return [name, {
+      average: groups.length ? values.reduce((sum, value) => sum + value, 0) / groups.length : 0,
+      maximum: Math.max(0, ...values),
+    }];
+  }));
+  return { groups: groups.sort((left, right) => right.value - left.value), total, average, averageOrders, productNames, productStats };
+}
+
+function groupSuggestion(group, report) {
+  const messages = [];
+  if (group.value < report.average) messages.push(`群总产值低于群均值 ${currency(report.average - group.value)}`);
+  else if (group.value === Math.max(...report.groups.map(item => item.value))) messages.push("本月群总产值排名第一，可复盘成交路径并复制到其他群");
+  if (group.orders.size < report.averageOrders) messages.push(`群订单数低于均值 ${plainNumber(report.averageOrders, 1)} 单，建议检查活跃人数、触达频次和转化跟进`);
+  const weak = report.productNames.filter(name => (group.products.get(name)?.value || 0) < report.productStats.get(name).average).slice(0, 4);
+  if (weak.length) messages.push(`低于单品均值：${weak.join("、")}；建议核对客户需求匹配、产品讲解和组合推荐`);
+  const products = [...group.products.values()].sort((left, right) => right.value - left.value);
+  if (products[0] && group.value > 0 && products[0].value / group.value > .65) messages.push(`产值较集中于“${products[0].name}”，建议增加关联产品开发，降低单品依赖`);
+  if (!messages.length) messages.push("群产值和产品开发接近或高于均值，建议保持触达节奏并复盘高产单品话术");
+  return `AI分析建议（基于本月数据规则）\n${messages.join("\n")}`;
+}
+
+function renderGroupAnalysis() {
+  const orders = Array.isArray(groupOrderSnapshot.orders) ? groupOrderSnapshot.orders : [];
+  const saved = new Map((groupAssignments.assignments || []).map(item => [item.groupNumber, item]));
+  const discovered = [...new Set(orders.map(order => order.groupNumber).filter(Boolean))];
+  const groupNumbers = [...new Set([...saved.keys(), ...discovered])].sort((a, b) => a.localeCompare(b, "zh-CN"));
+  const latestEmployee = new Map();
+  [...orders].sort((a, b) => normalizeTime(a.orderTime).localeCompare(normalizeTime(b.orderTime))).forEach(order => latestEmployee.set(order.groupNumber, order.employeeName));
+  const staffNames = [...new Set([...(monthlyReport?.staff || []).map(person => person.name), ...orders.map(order => order.employeeName)])].filter(Boolean).sort((a, b) => a.localeCompare(b, "zh-CN"));
+  elements.groupStaffNames.innerHTML = staffNames.map(name => `<option value="${escapeHtml(name)}"></option>`).join("");
+  const editable = groupAssignmentsEditable();
+  elements.groupAssignmentBody.innerHTML = groupNumbers.map(groupNumber => {
+    const setting = saved.get(groupNumber) || { groupNumber, employeeName: latestEmployee.get(groupNumber) || "", startAt: "" };
+    const groupOrders = orders.filter(order => order.groupNumber === groupNumber && (!setting.startAt || normalizeTime(order.orderTime) >= normalizeTime(setting.startAt)));
+    const value = groupOrders.reduce((sum, order) => sum + groupOrderNet(order), 0);
+    return `<tr data-group-assignment="${escapeHtml(groupNumber)}"><td>${editable ? `<input class="group-input" data-group-employee value="${escapeHtml(setting.employeeName)}" list="groupStaffNames" placeholder="员工姓名" />` : `<strong>${escapeHtml(setting.employeeName || "未填写")}</strong>`}</td><td><strong class="group-number">${escapeHtml(groupNumber)}</strong></td><td>${editable ? `<input class="group-input group-time-input" data-group-start type="datetime-local" value="${escapeHtml(String(setting.startAt || "").replace(" ", "T").slice(0, 16))}" />` : escapeHtml(setting.startAt || "未填写")}</td><td class="number">${setting.startAt ? new Set(groupOrders.map(order => order.orderKey)).size : "-"}</td><td class="number net-amount">${setting.startAt ? currency(value) : "-"}</td></tr>`;
+  }).join("") || '<tr><td colspan="5"><div class="empty-state"><strong>该月尚未发现客户微信群号</strong><span>管理员可点击“同步订单管理”读取最新数据。</span></div></td></tr>';
+
+  const report = buildGroupReport();
+  elements.configuredGroupCount.textContent = report.groups.length;
+  elements.groupTotalValue.textContent = currency(report.total);
+  elements.groupAverageValue.textContent = currency(report.average);
+  elements.groupAverageOrders.textContent = plainNumber(report.averageOrders, 1);
+  elements.groupDataState.textContent = groupOrderSnapshot.updatedAt
+    ? `${groupOrderSnapshot.month.replace("-", "年")}月 · ${formatDateTime(groupOrderSnapshot.updatedAt)} · ${orders.length} 个有群号订单`
+    : "尚未同步该月订单管理数据";
+  if (!report.groups.length) {
+    elements.groupComparison.innerHTML = '<div class="empty-state group-empty"><strong>请先填写员工姓名和接群时间</strong><span>保存后才会把该群在接群时间之后的订单纳入对比。</span></div>';
+    return;
+  }
+  const topValue = Math.max(...report.groups.map(group => group.value));
+  const headers = report.productNames.map(name => `<th class="group-product-head" title="${escapeHtml(name)}"><span>${escapeHtml(name)}</span></th>`).join("");
+  const rows = report.groups.map(group => {
+    const totalClass = group.value === topValue && topValue > 0 ? " group-leader" : group.value < report.average ? " group-below" : "";
+    const cells = report.productNames.map(name => {
+      const product = group.products.get(name) || { quantity: 0, value: 0 };
+      const stats = report.productStats.get(name);
+      const state = stats.maximum > 0 && product.value === stats.maximum ? " group-leader" : product.value < stats.average ? " group-below" : "";
+      return `<td class="number group-product-cell${state}" title="${escapeHtml(name)}：${product.quantity} 件，产值 ${currency(product.value)}；群均值 ${currency(stats.average)}">${plainNumber(product.value)}</td>`;
+    }).join("");
+    const insight = groupSuggestion(group, report);
+    return `<tr><td><strong>${escapeHtml(group.employeeName)}</strong></td><td><strong class="group-number">${escapeHtml(group.groupNumber)}</strong></td><td>${escapeHtml(group.startAt.slice(0, 16))}</td><td class="number">${group.orders.size}</td><td class="number${totalClass}"><button class="group-insight" type="button" title="${escapeHtml(insight)}">${escapeHtml(currency(group.value))}<span aria-hidden="true">i</span></button></td>${cells}</tr>`;
+  }).join("");
+  const averages = report.productNames.map(name => `<td class="number group-average-cell">${plainNumber(report.productStats.get(name).average)}</td>`).join("");
+  elements.groupComparison.innerHTML = `<div class="group-legend"><span><i class="legend-swatch below"></i>低于均值</span><span><i class="legend-swatch leader"></i>区间第一</span><span>产值金额可悬停查看 AI 分析建议</span></div><div class="table-wrap"><table class="group-comparison-table"><thead><tr><th>员工姓名</th><th>群号</th><th>接群时间</th><th class="number">订单数</th><th class="number">群总产值</th>${headers}</tr></thead><tbody>${rows}</tbody><tfoot><tr><td></td><td><strong>群均值</strong></td><td></td><td class="number">${plainNumber(report.averageOrders, 1)}</td><td class="number">${currency(report.average)}</td>${averages}</tr></tfoot></table></div>`;
+}
+
+async function loadGroupAnalysis() {
+  const month = elements.groupMonth.value || elements.reportMonth.value;
+  if (!month) return;
+  try {
+    const [snapshot, assignments] = await Promise.all([
+      fetchJson(`/api/group-orders?month=${encodeURIComponent(month)}`),
+      fetchJson("/api/group-assignments"),
+    ]);
+    groupOrderSnapshot = snapshot;
+    groupAssignments = assignments;
+    renderGroupAnalysis();
+  } catch (error) { showToast(`群产值加载失败：${error.message}`); }
+}
+
+async function saveGroupAssignmentSettings() {
+  const assignments = [...document.querySelectorAll("[data-group-assignment]")].map(row => ({
+    groupNumber: row.dataset.groupAssignment,
+    employeeName: row.querySelector("[data-group-employee]")?.value.trim() || "",
+    startAt: row.querySelector("[data-group-start]")?.value || "",
+  }));
+  elements.saveGroupAssignments.disabled = true;
+  try {
+    groupAssignments = await fetchJson("/api/group-assignments", { method: "POST", body: JSON.stringify({ assignments }) });
+    renderGroupAnalysis();
+    showToast("群号归属和接群时间已保存，群产值已重新计算");
+  } catch (error) { showToast(`保存失败：${error.message}`); }
+  finally { elements.saveGroupAssignments.disabled = false; }
+}
+
+async function syncGroupOrderData() {
+  elements.syncGroupOrders.disabled = true;
+  elements.syncGroupOrders.classList.add("is-refreshing");
+  try {
+    groupOrderSnapshot = await fetchJson("/api/group-sync", { method: "POST", body: JSON.stringify({ month: elements.groupMonth.value }) });
+    renderGroupAnalysis();
+    showToast(`订单管理同步完成：读取 ${groupOrderSnapshot.orders.length} 个有群号订单`);
+  } catch (error) { showToast(`订单管理同步失败：${error.message}`); }
+  finally {
+    elements.syncGroupOrders.disabled = false;
+    elements.syncGroupOrders.classList.remove("is-refreshing");
+  }
 }
 
 function rankCell(index) {
@@ -988,7 +1147,10 @@ function activateView(name) {
   if (name === "monthly") loadMonthlyReport();
   if (name === "phases") loadPhaseReport();
   if (name === "products" || name === "staff") loadMonthlyReport();
-  if (name === "staff") loadPhaseReport();
+  if (name === "staff") {
+    loadPhaseReport();
+    loadGroupAnalysis();
+  }
   if (name === "archives") loadArchives();
 }
 
@@ -1011,6 +1173,7 @@ elements.date.addEventListener("change", async () => {
   const selectedMonth = elements.date.value.slice(0, 7);
   elements.reportMonth.value = selectedMonth;
   elements.phaseMonth.value = selectedMonth;
+  elements.groupMonth.value = selectedMonth;
   monthlyReport = null;
   currentRecords = [];
   currentArchive = null;
@@ -1057,6 +1220,9 @@ elements.staffComparison.addEventListener("click", event => {
 });
 elements.reportMonth.addEventListener("change", loadMonthlyReport);
 elements.saveTargets.addEventListener("click", saveMonthlyTargets);
+elements.groupMonth.addEventListener("change", loadGroupAnalysis);
+elements.syncGroupOrders.addEventListener("click", syncGroupOrderData);
+elements.saveGroupAssignments.addEventListener("click", saveGroupAssignmentSettings);
 elements.phaseMonth.addEventListener("change", loadPhaseReport);
 elements.savePhaseSettings.addEventListener("click", savePhaseSettings);
 document.querySelectorAll(".rank-tab").forEach(tab => tab.addEventListener("click", () => {
@@ -1070,6 +1236,7 @@ const savedDate = localStorage.getItem(DATE_KEY);
 elements.date.value = normalizeReportingDate(window.STATIC_DEFAULT_DATE || (savedDate === today ? savedDate : today));
 elements.reportMonth.value = elements.date.value.slice(0, 7);
 elements.phaseMonth.value = elements.date.value.slice(0, 7);
+elements.groupMonth.value = elements.date.value.slice(0, 7);
 async function initialize() {
   try { reportSettings = await fetchJson("/api/report-settings"); } catch {}
   currentRecords = demoData;
@@ -1080,6 +1247,7 @@ async function initialize() {
   await loadArchives();
   await openArchive(elements.date.value, { activate: false, notify: false });
   await loadMonthlyReport();
+  await loadGroupAnalysis();
   const status = await checkStatus();
   lastObservedAutoSync = status.autoSync?.lastSuccessAt || "";
 }

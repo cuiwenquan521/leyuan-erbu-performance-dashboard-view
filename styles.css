@@ -262,6 +262,39 @@ tbody tr:hover { background: #f8fbfa; }
 .performance-tooltip-empty { padding: 22px; color: var(--muted); text-align: center; font-size: 12px; }
 .staff-phase-table-section .phase-table tbody .phase-fixed-1, .staff-phase-table-section .phase-table tbody .phase-fixed-2 { font-size: 14px; font-weight: 700; }
 
+.group-analysis-section { margin-top: 14px; }
+.group-analysis-heading { gap: 18px; }
+.group-toolbar { min-height: 74px; padding: 12px 16px; display: flex; align-items: end; gap: 12px; background: #f5f8f9; border-bottom: 1px solid var(--border); }
+.group-toolbar p { margin: 0 0 8px auto; color: var(--muted); font-size: 12px; }
+.group-config-wrap { max-height: 360px; border-bottom: 1px solid var(--border); }
+.group-config-table { min-width: 760px; table-layout: fixed; }
+.group-config-table th, .group-config-table td { padding: 9px 14px; border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); vertical-align: middle; }
+.group-config-table th:last-child, .group-config-table td:last-child { border-right: 0; }
+.group-config-table th { position: sticky; top: 0; z-index: 2; background: #f1f4f6; font-size: 13px; }
+.group-config-table th:nth-child(1) { width: 22%; }.group-config-table th:nth-child(2) { width: 17%; }.group-config-table th:nth-child(3) { width: 28%; }
+.group-input { width: 100%; height: 35px; box-sizing: border-box; padding: 0 9px; color: var(--text); background: #fff; border: 1px solid #bdcbd3; border-radius: 4px; font: inherit; }
+.group-input:focus { outline: 2px solid #a8d3c8; border-color: var(--primary); }
+.group-number { color: #16384a; font-size: 14px; letter-spacing: 0; }
+.group-metrics { margin: 14px 14px 0; border: 1px solid var(--border); border-radius: 5px; }
+.group-comparison { padding: 14px; }
+.group-empty { min-height: 180px; border: 1px dashed #c5d1d7; }
+.group-legend { padding: 0 2px 10px; display: flex; align-items: center; gap: 18px; color: var(--muted); font-size: 11px; }
+.group-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.group-comparison-table { min-width: 980px; border-collapse: separate; border-spacing: 0; }
+.group-comparison-table th, .group-comparison-table td { height: 43px; padding: 7px 10px; border-right: 1px solid #b9cbd4; border-bottom: 1px solid #b9cbd4; white-space: nowrap; }
+.group-comparison-table th:first-child, .group-comparison-table td:first-child { border-left: 1px solid #b9cbd4; }
+.group-comparison-table thead th { background: #f3d9d7; border-top: 1px solid #b9cbd4; font-size: 13px; font-weight: 800; }
+.group-comparison-table tbody tr:nth-child(odd) td { background: #eef8fc; }
+.group-comparison-table tbody tr:nth-child(even) td { background: #e3f2f8; }
+.group-comparison-table tfoot td { background: #d2eaf3; font-weight: 800; }
+.group-product-head { width: 130px; max-width: 130px; }
+.group-product-head span { display: block; overflow: hidden; text-overflow: ellipsis; }
+.group-comparison-table td.group-below { background: #fff0b8 !important; color: #6f5200; font-weight: 800; }
+.group-comparison-table td.group-leader { background: #f7c2c2 !important; color: #9c1c24; font-weight: 800; }
+.group-insight { width: 100%; padding: 4px 0; display: inline-flex; justify-content: flex-end; align-items: center; gap: 5px; color: inherit; background: transparent; border: 0; border-bottom: 1px dotted currentColor; cursor: help; font: inherit; font-weight: inherit; }
+.group-insight span { width: 15px; height: 15px; display: inline-grid; place-items: center; color: #fff; background: #557788; border-radius: 50%; font-family: Georgia,serif; font-size: 10px; }
+.group-average-cell { color: #344d5a; }
+
 .empty-state { min-height: 250px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px; color: var(--muted); }
 .empty-icon { width: 41px; height: 41px; display: grid; place-items: center; color: #7c8994; border: 1px solid #bcc7cf; border-radius: 5px; }
 .empty-state strong { color: #3c4955; }
@@ -303,6 +336,8 @@ footer { padding: 14px 2px 0; display: flex; justify-content: space-between; gap
   .rank-tab { flex: 0 0 auto; }
   .phase-toolbar { flex-wrap: wrap; }
   .phase-toolbar p { width: 100%; margin-left: 0; }
+  .group-toolbar { align-items: stretch; flex-wrap: wrap; }
+  .group-toolbar p { width: 100%; margin-left: 0; }
 }
 
 @media (max-width: 620px) {
@@ -338,6 +373,9 @@ footer { padding: 14px 2px 0; display: flex; justify-content: space-between; gap
   .target-control > div { width: 100%; }
   .phase-toolbar > * { width: 100%; }
   .phase-toolbar .compact-field input { width: 100%; }
+  .group-toolbar > * { width: 100%; }
+  .group-metrics { margin-left: 9px; margin-right: 9px; }
+  .group-comparison { padding: 9px; }
   .phase-chart { padding-left: 6px; padding-right: 6px; }
   .phase-table-wrap { max-height: 560px; }
   .phase-table .phase-fixed-3, .phase-table .phase-fixed-4, .phase-table .phase-fixed-5,

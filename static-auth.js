@@ -105,6 +105,11 @@
         return jsonResponse({ ...payload.status, publicViewOnly: true, publicRole: role });
       }
       if (url.pathname === "/api/report-settings") return jsonResponse(payload.reportSettings);
+      if (url.pathname === "/api/group-assignments") return jsonResponse(payload.groupAssignments || { assignments: [] });
+      if (url.pathname === "/api/group-orders") {
+        const month = url.searchParams.get("month") || "";
+        return jsonResponse(payload.groupOrders?.[month] || { month, source: "尚未同步", updatedAt: "", count: 0, orders: [] });
+      }
       if (url.pathname === "/api/archives") return jsonResponse({ archives: payload.archivesMeta });
       if (url.pathname === "/api/targets") {
         const month = url.searchParams.get("month") || "";
