@@ -1,4 +1,5 @@
 const DATE_KEY = "order-performance-dashboard-date-v2";
+const GROUP_RANGE_KEY = "order-performance-dashboard-group-range-v1";
 const STAFF_ROSTER = [
   { department: "乐源二部", name: "储玉岳" },
 ];
@@ -35,10 +36,17 @@ const elements = {
   staffComparison: document.querySelector("#staffComparison"),
   staffAnalysisPeriod: document.querySelector("#staffAnalysisPeriod"),
   groupMonth: document.querySelector("#groupMonth"),
+  groupStartMonth: document.querySelector("#groupStartMonth"),
+  groupEndMonth: document.querySelector("#groupEndMonth"),
+  applyGroupRange: document.querySelector("#applyGroupRange"),
+  useGroupJoinMonth: document.querySelector("#useGroupJoinMonth"),
+  syncGroupRange: document.querySelector("#syncGroupRange"),
   syncGroupOrders: document.querySelector("#syncGroupOrders"),
   saveGroupAssignments: document.querySelector("#saveGroupAssignments"),
   groupDataState: document.querySelector("#groupDataState"),
   groupAssignmentBody: document.querySelector("#groupAssignmentBody"),
+  groupConfigOrdersLabel: document.querySelector("#groupConfigOrdersLabel"),
+  groupConfigValueLabel: document.querySelector("#groupConfigValueLabel"),
   configuredGroupCount: document.querySelector("#configuredGroupCount"),
   groupTotalValue: document.querySelector("#groupTotalValue"),
   groupAverageValue: document.querySelector("#groupAverageValue"),
@@ -100,6 +108,7 @@ let monthlyRankMode = "performance";
 let phaseReport = null;
 let groupOrderSnapshot = { month: "", updatedAt: "", orders: [] };
 let groupAssignments = { assignments: [] };
+let groupRangeActive = false;
 let annualReport = null;
 let showFormerStaff = false;
 let reportSettings = { firstDayStart: "00:00", cutoffTime: "18:00", autoDelayMinutes: 5 };
@@ -481,7 +490,7 @@ function setPublicViewOnly(enabled) {
   [elements.connect, elements.refresh, elements.savePhaseSettings].forEach(control => {
     if (control) control.hidden = publicViewOnly;
   });
-  [elements.syncGroupOrders, elements.saveGroupAssignments].forEach(control => {
+  [elements.syncGroupOrders, elements.syncGroupRange, elements.saveGroupAssignments].forEach(control => {
     if (control) control.hidden = publicViewOnly;
   });
   if (elements.syncAnnualPerformance) elements.syncAnnualPerformance.hidden = publicViewOnly;
@@ -588,6 +597,7 @@ async function refreshErp() {
     await loadArchives();
     await loadMonthlyReport();
     elements.groupMonth.value = date.slice(0, 7);
+    groupRangeActive = false;
     await loadGroupAnalysis();
     showToast(archive.warning || `ERP同步完成：${formatDateTime(archive.updatedAt)}，读取 ${archive.flowCount} 条流水，按订单号去重为 ${archive.orderCount} 单`);
     return archive;
@@ -653,6 +663,48 @@ function groupOrderNet(order) {
   return amount(order.sellerReceivable) - amount(order.refundAmount);
 }
 
+function groupMonthSequence(startMonth, endMonth) {
+  const startParts = String(startMonth).split("-").map(Number);
+  const endParts = String(endMonth).split("-").map(Number);
+  const validMonth = (value, parts) => /^\d{4}-\d{2}$/.test(value) && parts[0] >= 2020 && parts[0] <= 2100 && parts[1] >= 1 && parts[1] <= 12;
+  if (!validMonth(startMonth, startParts) || !validMonth(endMonth, endParts) || startMonth > endMonth) {
+    throw new Error("请选择有效的累计开始月份和结束月份");
+  }
+  const months = [];
+  let [year, month] = startParts;
+  const [endYear, endMonthNumber] = endParts;
+  while (year < endYear || (year === endYear && month <= endMonthNumber)) {
+    months.push(`${year}-${String(month).padStart(2, "0")}`);
+    if (months.length > 12) throw new Error("累计区间最多选择 12 个月");
+    month += 1;
+    if (month > 12) { year += 1; month = 1; }
+  }
+  return months;
+}
+
+function mergeGroupOrderSnapshots(snapshots, months) {
+  const orders = new Map();
+  snapshots.forEach(snapshot => (snapshot.orders || []).forEach(order => orders.set(order.orderKey, order)));
+  const syncedMonths = snapshots.filter(snapshot => snapshot.updatedAt).map(snapshot => snapshot.month);
+  return {
+    month: months.length === 1 ? months[0] : months.at(-1),
+    startMonth: months[0],
+    endMonth: months.at(-1),
+    updatedAt: snapshots.map(snapshot => snapshot.updatedAt || "").sort().at(-1) || "",
+    orders: [...orders.values()],
+    syncedMonths,
+    missingMonths: months.filter(month => !syncedMonths.includes(month)),
+  };
+}
+
+function groupPeriodLabel(snapshot = groupOrderSnapshot) {
+  const start = snapshot.startMonth || snapshot.month;
+  const end = snapshot.endMonth || snapshot.month;
+  if (!start) return "尚未选择月份";
+  const display = month => `${month.slice(0, 4)}年${month.slice(5)}月`;
+  return start === end ? display(start) : `${display(start)} - ${display(end)}`;
+}
+
 function buildGroupReport() {
   const orders = Array.isArray(groupOrderSnapshot.orders) ? groupOrderSnapshot.orders : [];
   const assignments = Array.isArray(groupAssignments.assignments) ? groupAssignments.assignments : [];
@@ -703,14 +755,14 @@ function buildGroupReport() {
 function groupSuggestion(group, report) {
   const messages = [];
   if (group.value < report.average) messages.push(`群总产值低于群均值 ${currency(report.average - group.value)}`);
-  else if (group.value === Math.max(...report.groups.map(item => item.value))) messages.push("本月群总产值排名第一，可复盘成交路径并复制到其他群");
+  else if (group.value === Math.max(...report.groups.map(item => item.value))) messages.push("所选区间群总产值排名第一，可复盘成交路径并复制到其他群");
   if (group.orders.size < report.averageOrders) messages.push(`群订单数低于均值 ${plainNumber(report.averageOrders, 1)} 单，建议检查活跃人数、触达频次和转化跟进`);
   const weak = report.productNames.filter(name => (group.products.get(name)?.value || 0) < report.productStats.get(name).average).slice(0, 4);
   if (weak.length) messages.push(`低于单品均值：${weak.join("、")}；建议核对客户需求匹配、产品讲解和组合推荐`);
   const products = [...group.products.values()].sort((left, right) => right.value - left.value);
   if (products[0] && group.value > 0 && products[0].value / group.value > .65) messages.push(`产值较集中于“${products[0].name}”，建议增加关联产品开发，降低单品依赖`);
   if (!messages.length) messages.push("群产值和产品开发接近或高于均值，建议保持触达节奏并复盘高产单品话术");
-  return `AI分析建议（基于本月数据规则）\n${messages.join("\n")}`;
+  return `AI分析建议（基于所选区间数据）\n${messages.join("\n")}`;
 }
 
 function renderGroupAnalysis() {
@@ -723,6 +775,9 @@ function renderGroupAnalysis() {
   const staffNames = [...new Set([...(monthlyReport?.staff || []).map(person => person.name), ...orders.map(order => order.employeeName)])].filter(Boolean).sort((a, b) => a.localeCompare(b, "zh-CN"));
   elements.groupStaffNames.innerHTML = staffNames.map(name => `<option value="${escapeHtml(name)}"></option>`).join("");
   const editable = groupAssignmentsEditable();
+  const rangeLabel = groupRangeActive ? "区间" : "该月";
+  elements.groupConfigOrdersLabel.textContent = `${rangeLabel}订单`;
+  elements.groupConfigValueLabel.textContent = `${rangeLabel}群产值`;
   elements.groupAssignmentBody.innerHTML = groupNumbers.map(groupNumber => {
     const setting = saved.get(groupNumber) || { groupNumber, employeeName: latestEmployee.get(groupNumber) || "", startAt: "" };
     const groupOrders = orders.filter(order => order.groupNumber === groupNumber && (!setting.startAt || normalizeTime(order.orderTime) >= normalizeTime(setting.startAt)));
@@ -735,9 +790,10 @@ function renderGroupAnalysis() {
   elements.groupTotalValue.textContent = currency(report.total);
   elements.groupAverageValue.textContent = currency(report.average);
   elements.groupAverageOrders.textContent = plainNumber(report.averageOrders, 1);
+  const missingText = groupOrderSnapshot.missingMonths?.length ? ` · ${groupOrderSnapshot.missingMonths.length} 个月尚未同步` : "";
   elements.groupDataState.textContent = groupOrderSnapshot.updatedAt
-    ? `${groupOrderSnapshot.month.replace("-", "年")}月 · ${formatDateTime(groupOrderSnapshot.updatedAt)} · ${orders.length} 个有群号订单`
-    : "尚未同步该月订单管理数据";
+    ? `${groupPeriodLabel()} · ${formatDateTime(groupOrderSnapshot.updatedAt)} · ${orders.length} 个有群号订单${missingText}`
+    : `尚未同步${groupRangeActive ? "所选区间" : "该月"}订单管理数据`;
   if (!report.groups.length) {
     elements.groupComparison.innerHTML = '<div class="empty-state group-empty"><strong>请先填写员工姓名和接群时间</strong><span>保存后才会把该群在接群时间之后的订单纳入对比。</span></div>';
     return;
@@ -829,17 +885,36 @@ async function syncAnnualPerformanceData() {
 }
 
 async function loadGroupAnalysis() {
-  const month = elements.groupMonth.value || elements.reportMonth.value;
-  if (!month) return;
   try {
+    const month = elements.groupMonth.value || elements.reportMonth.value;
+    const months = groupRangeActive
+      ? groupMonthSequence(elements.groupStartMonth.value, elements.groupEndMonth.value)
+      : groupMonthSequence(month, month);
     const [snapshot, assignments] = await Promise.all([
-      fetchJson(`/api/group-orders?month=${encodeURIComponent(month)}`),
+      Promise.all(months.map(item => fetchJson(`/api/group-orders?month=${encodeURIComponent(item)}`))),
       fetchJson("/api/group-assignments"),
     ]);
-    groupOrderSnapshot = snapshot;
+    groupOrderSnapshot = mergeGroupOrderSnapshots(snapshot, months);
     groupAssignments = assignments;
     renderGroupAnalysis();
   } catch (error) { showToast(`群产值加载失败：${error.message}`); }
+}
+
+async function applyGroupRange() {
+  try {
+    groupMonthSequence(elements.groupStartMonth.value, elements.groupEndMonth.value);
+    groupRangeActive = true;
+    localStorage.setItem(GROUP_RANGE_KEY, JSON.stringify({ start: elements.groupStartMonth.value, end: elements.groupEndMonth.value }));
+    await loadGroupAnalysis();
+  } catch (error) { showToast(error.message); }
+}
+
+async function applyGroupJoinRange() {
+  const starts = (groupAssignments.assignments || []).map(item => String(item.startAt || "").slice(0, 7)).filter(Boolean).sort();
+  if (!starts.length) { showToast("请先填写并保存至少一个群的接群时间"); return; }
+  elements.groupStartMonth.value = starts[0];
+  elements.groupEndMonth.value = elements.groupMonth.value || elements.reportMonth.value;
+  await applyGroupRange();
 }
 
 async function saveGroupAssignmentSettings() {
@@ -861,13 +936,39 @@ async function syncGroupOrderData() {
   elements.syncGroupOrders.disabled = true;
   elements.syncGroupOrders.classList.add("is-refreshing");
   try {
+    groupRangeActive = false;
     groupOrderSnapshot = await fetchJson("/api/group-sync", { method: "POST", body: JSON.stringify({ month: elements.groupMonth.value }) });
+    groupOrderSnapshot = mergeGroupOrderSnapshots([groupOrderSnapshot], [elements.groupMonth.value]);
     renderGroupAnalysis();
     showToast(`订单管理同步完成：读取 ${groupOrderSnapshot.orders.length} 个有群号订单`);
   } catch (error) { showToast(`订单管理同步失败：${error.message}`); }
   finally {
     elements.syncGroupOrders.disabled = false;
     elements.syncGroupOrders.classList.remove("is-refreshing");
+  }
+}
+
+async function syncGroupRangeData() {
+  let months;
+  try { months = groupMonthSequence(elements.groupStartMonth.value, elements.groupEndMonth.value); }
+  catch (error) { showToast(error.message); return; }
+  groupRangeActive = true;
+  elements.syncGroupRange.disabled = true;
+  elements.syncGroupRange.classList.add("is-refreshing");
+  const originalText = elements.syncGroupRange.textContent;
+  try {
+    for (let index = 0; index < months.length; index += 1) {
+      elements.syncGroupRange.textContent = `同步 ${index + 1}/${months.length}`;
+      await fetchJson("/api/group-sync", { method: "POST", body: JSON.stringify({ month: months[index] }) });
+    }
+    localStorage.setItem(GROUP_RANGE_KEY, JSON.stringify({ start: months[0], end: months.at(-1) }));
+    await loadGroupAnalysis();
+    showToast(`累计区间同步完成：${groupPeriodLabel()}，共 ${groupOrderSnapshot.orders.length} 个有群号订单`);
+  } catch (error) { showToast(`累计区间同步失败：${error.message}`); }
+  finally {
+    elements.syncGroupRange.textContent = originalText;
+    elements.syncGroupRange.disabled = false;
+    elements.syncGroupRange.classList.remove("is-refreshing");
   }
 }
 
@@ -1264,6 +1365,7 @@ elements.date.addEventListener("change", async () => {
   elements.reportMonth.value = selectedMonth;
   elements.phaseMonth.value = selectedMonth;
   elements.groupMonth.value = selectedMonth;
+  groupRangeActive = false;
   monthlyReport = null;
   currentRecords = [];
   currentArchive = null;
@@ -1310,7 +1412,13 @@ elements.staffComparison.addEventListener("click", event => {
 });
 elements.reportMonth.addEventListener("change", loadMonthlyReport);
 elements.saveTargets.addEventListener("click", saveMonthlyTargets);
-elements.groupMonth.addEventListener("change", loadGroupAnalysis);
+elements.groupMonth.addEventListener("change", () => {
+  groupRangeActive = false;
+  loadGroupAnalysis();
+});
+elements.applyGroupRange.addEventListener("click", applyGroupRange);
+elements.useGroupJoinMonth.addEventListener("click", applyGroupJoinRange);
+elements.syncGroupRange.addEventListener("click", syncGroupRangeData);
 elements.syncGroupOrders.addEventListener("click", syncGroupOrderData);
 elements.saveGroupAssignments.addEventListener("click", saveGroupAssignmentSettings);
 elements.annualYear.addEventListener("change", loadAnnualPerformance);
@@ -1333,6 +1441,14 @@ elements.date.value = normalizeReportingDate(window.STATIC_DEFAULT_DATE || (save
 elements.reportMonth.value = elements.date.value.slice(0, 7);
 elements.phaseMonth.value = elements.date.value.slice(0, 7);
 elements.groupMonth.value = elements.date.value.slice(0, 7);
+try {
+  const savedGroupRange = JSON.parse(localStorage.getItem(GROUP_RANGE_KEY) || "null");
+  elements.groupStartMonth.value = savedGroupRange?.start || elements.groupMonth.value;
+  elements.groupEndMonth.value = savedGroupRange?.end || elements.groupMonth.value;
+} catch {
+  elements.groupStartMonth.value = elements.groupMonth.value;
+  elements.groupEndMonth.value = elements.groupMonth.value;
+}
 elements.annualYear.value = String(new Date().getFullYear());
 async function initialize() {
   try { reportSettings = await fetchJson("/api/report-settings"); } catch {}
