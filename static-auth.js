@@ -2,7 +2,34 @@
   const nativeFetch = window.fetch.bind(window);
   const CLOUD_TARGETS_KEY = "leyuan-cloud-targets-v1";
   const CLOUD_SESSION_KEY = "leyuan-cloud-session-v1";
-  const LOCAL_GROUP_ASSIGNMENTS_URL = "http://127.0.0.1:8765/api/group-assignments";
+  const LOCAL_DASHBOARD_ORIGIN = "http://127.0.0.1:8765";
+
+  function saveGroupAssignmentsThroughBridge(assignments) {
+    return new Promise((resolve, reject) => {
+      const popup = window.open(`${LOCAL_DASHBOARD_ORIGIN}/?group-config=1&bridge=1`, "leyuan-group-config-bridge", "width=720,height=520");
+      if (!popup) {
+        reject(new Error("浏览器阻止了本机保存窗口，请允许此网站打开弹窗后重试"));
+        return;
+      }
+      const timeout = window.setTimeout(() => finish(new Error("本机同步服务响应超时，请确认同步服务正在运行")), 30000);
+      const finish = (error, result) => {
+        window.clearTimeout(timeout);
+        window.removeEventListener("message", onMessage);
+        if (error) reject(error);
+        else resolve(result);
+      };
+      const onMessage = event => {
+        if (event.origin !== LOCAL_DASHBOARD_ORIGIN || event.source !== popup) return;
+        if (event.data?.type === "leyuan-group-config-ready") {
+          popup.postMessage({ type: "leyuan-group-config-save", assignments }, LOCAL_DASHBOARD_ORIGIN);
+          return;
+        }
+        if (event.data?.type === "leyuan-group-config-saved") finish(null, event.data.result);
+        if (event.data?.type === "leyuan-group-config-error") finish(new Error(event.data.message || "本机群配置保存失败"));
+      };
+      window.addEventListener("message", onMessage);
+    });
+  }
 
   function readCloudSession() {
     try {
@@ -122,18 +149,12 @@
       if (url.pathname === "/api/group-assignments" && method === "POST") {
         if (role !== "admin") return jsonResponse({ message: "查看账号不能修改群维护配置" }, 403);
         try {
-          const response = await nativeFetch(LOCAL_GROUP_ASSIGNMENTS_URL, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: options.body,
-            cache: "no-store",
-          });
-          const result = await response.json();
-          if (!response.ok) return jsonResponse({ message: result.message || "本机群配置保存失败" }, response.status);
+          const request = typeof options.body === "string" ? JSON.parse(options.body) : options.body;
+          const result = await saveGroupAssignmentsThroughBridge(request?.assignments || []);
           payload.groupAssignments = result;
           return jsonResponse(result);
-        } catch {
-          return jsonResponse({ message: "无法连接本机同步服务，请确认电脑已启动且同步窗口正在运行" }, 503);
+        } catch (error) {
+          return jsonResponse({ message: error.message || "无法连接本机同步服务" }, 503);
         }
       }
       if (method !== "GET") return jsonResponse({ message: "云端存档仅允许查看" }, 403);

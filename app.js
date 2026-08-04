@@ -1522,6 +1522,25 @@ async function initialize() {
 async function handleStartupAction() {
   if (window.STATIC_ARCHIVE_MODE) return;
   const params = new URLSearchParams(window.location.search);
+  const isGroupConfigBridge = params.get("group-config") === "1" && params.get("bridge") === "1";
+  if (isGroupConfigBridge) {
+    history.replaceState(null, "", window.location.pathname);
+    const allowedOrigins = new Set(["https://cuiwenquan521.github.io", "http://127.0.0.1:8770"]);
+    const receiveGroupConfig = async event => {
+      if (event.source !== window.opener || !allowedOrigins.has(event.origin) || event.data?.type !== "leyuan-group-config-save") return;
+      window.removeEventListener("message", receiveGroupConfig);
+      try {
+        const result = await fetchJson("/api/group-assignments", { method: "POST", body: JSON.stringify({ assignments: event.data.assignments }) });
+        window.opener?.postMessage({ type: "leyuan-group-config-saved", result }, event.origin);
+        window.setTimeout(() => window.close(), 500);
+      } catch (error) {
+        window.opener?.postMessage({ type: "leyuan-group-config-error", message: error.message }, event.origin);
+      }
+    };
+    window.addEventListener("message", receiveGroupConfig);
+    window.opener?.postMessage({ type: "leyuan-group-config-ready" }, "*");
+    return;
+  }
   const shouldConnect = params.get("connect") === "1";
   const shouldSync = params.get("sync") === "1";
   const isBridge = params.get("bridge") === "1";
