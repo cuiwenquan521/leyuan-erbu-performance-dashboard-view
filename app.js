@@ -496,8 +496,8 @@ function renderProductMonthlySummary(report, month) {
   if (focus.length) recommendations.push(`优先复盘“${focus[0].name}”的成交人员、客户需求和组合方式，并复制到同类产品。`);
   if (topShare >= .35) recommendations.push(`“${topProduct.name}”贡献本月${percent(topShare)}净值，产值集中度较高，建议同步培养第二重点产品。`);
   if (report.overallRefundRate > .1) recommendations.push(`整体退款率为${percent(report.overallRefundRate)}，建议优先核对退款产品的订单原因和售前匹配。`);
-  else if (refundRisks.length) recommendations.push("整体退款率可控，但仍需逐单复盘退款率靠前的产品。 ");
-  if (opportunities.length) recommendations.push("低订单产品建议从客户需求匹配、触达频次和关联组合三个方向逐项验证。 ");
+  else if (refundRisks.length) recommendations.push("整体退款率可控，但仍需逐单复盘退款率靠前的产品。");
+  if (opportunities.length) recommendations.push("低订单产品建议从客户需求匹配、触达频次和关联组合三个方向逐项验证。");
   elements.productMonthlySummary.innerHTML = `<div class="product-ai-heading"><h3>${escapeHtml(monthLabel)}产品 AI 总结</h3><p>依据本月订单数、件数、净值与退款率自动归纳</p></div><div class="product-ai-grid"><div><strong>重点售卖产品</strong><p>${escapeHtml(focusText)}</p></div><div><strong>退款关注产品</strong><p>${escapeHtml(refundText)}</p></div><div><strong>增长机会产品</strong><p>${escapeHtml(opportunityText)}</p></div><div><strong>本月行动建议</strong><p>${escapeHtml(recommendations.join(" ") || "保持当前产品结构，并持续复盘高净值订单。")}</p></div></div>`;
 }
 
