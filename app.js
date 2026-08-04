@@ -718,8 +718,11 @@ function buildGroupReport(prefix = "") {
   const configured = assignments.filter(item => item.groupNumber && item.employeeName && item.startAt && matchesGroupPrefix(item.groupNumber, prefix));
   const groups = configured.map(assignment => ({
     ...assignment,
+    memberCount: Math.max(0, Math.trunc(amount(assignment.memberCount))),
     orders: new Set(),
+    monthOrders: new Set(),
     value: 0,
+    monthValue: 0,
     products: new Map(),
   }));
   const byNumber = new Map(groups.map(group => [group.groupNumber, group]));
@@ -729,6 +732,10 @@ function buildGroupReport(prefix = "") {
     const net = groupOrderNet(order);
     group.orders.add(order.orderKey);
     group.value += net;
+    if (String(order.orderTime || "").slice(0, 7) === elements.groupMonth.value) {
+      group.monthOrders.add(order.orderKey);
+      group.monthValue += net;
+    }
     const products = Array.isArray(order.products) ? order.products : [];
     const totalWeight = products.reduce((sum, product) => sum + Math.max(0, amount(product.apportionedAmount)), 0)
       || products.reduce((sum, product) => sum + Math.max(0, amount(product.quantity)), 0);
@@ -744,19 +751,28 @@ function buildGroupReport(prefix = "") {
   const total = groups.reduce((sum, group) => sum + group.value, 0);
   const average = groups.length ? total / groups.length : 0;
   const averageOrders = groups.length ? groups.reduce((sum, group) => sum + group.orders.size, 0) / groups.length : 0;
-  const productNames = [...new Set(groups.flatMap(group => [...group.products.keys()]))].sort((left, right) => {
-    const leftValue = groups.reduce((sum, group) => sum + (group.products.get(left)?.value || 0), 0);
-    const rightValue = groups.reduce((sum, group) => sum + (group.products.get(right)?.value || 0), 0);
-    return rightValue - leftValue || left.localeCompare(right, "zh-CN");
+  groups.forEach(group => {
+    group.productQuantity = [...group.products.values()].reduce((sum, product) => sum + product.quantity, 0);
+    group.productTypes = [...group.products.values()].filter(product => product.quantity > 0).length;
+    group.developmentRate = group.memberCount > 0 ? group.orders.size / group.memberCount * 100 : null;
   });
+  const productNames = [...new Set(groups.flatMap(group => [...group.products.keys()]))].sort((left, right) => {
+    const leftQuantity = groups.reduce((sum, group) => sum + (group.products.get(left)?.quantity || 0), 0);
+    const rightQuantity = groups.reduce((sum, group) => sum + (group.products.get(right)?.quantity || 0), 0);
+    return rightQuantity - leftQuantity || left.localeCompare(right, "zh-CN");
+  });
+  groups.forEach(group => { group.productShare = productNames.length ? group.productTypes / productNames.length * 100 : 0; });
   const productStats = new Map(productNames.map(name => {
-    const values = groups.map(group => group.products.get(name)?.value || 0);
+    const quantities = groups.map(group => group.products.get(name)?.quantity || 0);
     return [name, {
-      average: groups.length ? values.reduce((sum, value) => sum + value, 0) / groups.length : 0,
-      maximum: Math.max(0, ...values),
+      average: groups.length ? quantities.reduce((sum, value) => sum + value, 0) / groups.length : 0,
+      maximum: Math.max(0, ...quantities),
     }];
   }));
-  return { groups: groups.sort((left, right) => right.value - left.value), total, average, averageOrders, productNames, productStats };
+  const ratedGroups = groups.filter(group => group.developmentRate !== null);
+  const averageDevelopmentRate = ratedGroups.length ? ratedGroups.reduce((sum, group) => sum + group.developmentRate, 0) / ratedGroups.length : null;
+  const averageProductShare = groups.length ? groups.reduce((sum, group) => sum + group.productShare, 0) / groups.length : 0;
+  return { groups: groups.sort((left, right) => right.value - left.value), total, average, averageOrders, averageDevelopmentRate, averageProductShare, productNames, productStats };
 }
 
 function groupSuggestion(group, report) {
@@ -764,7 +780,10 @@ function groupSuggestion(group, report) {
   if (group.value < report.average) messages.push(`群总产值低于群均值 ${currency(report.average - group.value)}`);
   else if (group.value === Math.max(...report.groups.map(item => item.value))) messages.push("所选区间群总产值排名第一，可复盘成交路径并复制到其他群");
   if (group.orders.size < report.averageOrders) messages.push(`群订单数低于均值 ${plainNumber(report.averageOrders, 1)} 单，建议检查活跃人数、触达频次和转化跟进`);
-  const weak = report.productNames.filter(name => (group.products.get(name)?.value || 0) < report.productStats.get(name).average).slice(0, 4);
+  if (!group.memberCount) messages.push("尚未填写群人数，暂时无法计算群内开发率");
+  else if (report.averageDevelopmentRate !== null && group.developmentRate < report.averageDevelopmentRate) messages.push(`群内开发率低于群均值 ${plainNumber(report.averageDevelopmentRate, 1)}%，建议检查群活跃度和订单转化`);
+  if (group.productShare < report.averageProductShare) messages.push(`产品开发占比低于群均值 ${plainNumber(report.averageProductShare, 1)}%，建议增加未覆盖单品的需求沟通`);
+  const weak = report.productNames.filter(name => (group.products.get(name)?.quantity || 0) < report.productStats.get(name).average).slice(0, 4);
   if (weak.length) messages.push(`低于单品均值：${weak.join("、")}；建议核对客户需求匹配、产品讲解和组合推荐`);
   const products = [...group.products.values()].sort((left, right) => right.value - left.value);
   if (products[0] && group.value > 0 && products[0].value / group.value > .65) messages.push(`产值较集中于“${products[0].name}”，建议增加关联产品开发，降低单品依赖`);
@@ -793,18 +812,19 @@ function renderGroupAnalysis() {
   elements.groupConfigOrdersLabel.textContent = `${rangeLabel}订单`;
   elements.groupConfigValueLabel.textContent = `${rangeLabel}群产值`;
   elements.groupAssignmentBody.innerHTML = groupNumbers.map(groupNumber => {
-    const setting = saved.get(groupNumber) || { groupNumber, employeeName: latestEmployee.get(groupNumber) || "", startAt: "" };
+    const setting = saved.get(groupNumber) || { groupNumber, employeeName: latestEmployee.get(groupNumber) || "", startAt: "", memberCount: 0 };
     const groupOrders = orders.filter(order => order.groupNumber === groupNumber && (!setting.startAt || normalizeTime(order.orderTime) >= normalizeTime(setting.startAt)));
     const value = groupOrders.reduce((sum, order) => sum + groupOrderNet(order), 0);
     const choices = [...new Set([...staffNames, setting.employeeName].filter(Boolean))].map(name => `<option value="${escapeHtml(name)}"${name === setting.employeeName ? " selected" : ""}>${escapeHtml(name)}${!staffNames.includes(name) ? "（历史人员）" : ""}</option>`).join("");
-    return `<tr data-group-assignment="${escapeHtml(groupNumber)}"><td>${editable ? `<select class="group-input" data-group-employee aria-label="${escapeHtml(groupNumber)} 维护员工"><option value="">未分配</option>${choices}</select>` : `<strong>${escapeHtml(setting.employeeName || "未填写")}</strong>`}</td><td><strong class="group-number">${escapeHtml(groupNumber)}</strong></td><td>${editable ? `<input class="group-input group-time-input" data-group-start type="datetime-local" value="${escapeHtml(String(setting.startAt || "").replace(" ", "T").slice(0, 16))}" />` : escapeHtml(setting.startAt || "未填写")}</td><td class="number">${setting.startAt ? new Set(groupOrders.map(order => order.orderKey)).size : "-"}</td><td class="number net-amount">${setting.startAt ? currency(value) : "-"}</td></tr>`;
-  }).join("") || '<tr><td colspan="5"><div class="empty-state"><strong>该月尚未发现客户微信群号</strong><span>管理员可点击“同步订单管理”读取最新数据。</span></div></td></tr>';
+    const memberCount = Math.max(0, Math.trunc(amount(setting.memberCount)));
+    return `<tr data-group-assignment="${escapeHtml(groupNumber)}"><td>${editable ? `<select class="group-input" data-group-employee aria-label="${escapeHtml(groupNumber)} 维护员工"><option value="">未分配</option>${choices}</select>` : `<strong>${escapeHtml(setting.employeeName || "未填写")}</strong>`}</td><td><strong class="group-number">${escapeHtml(groupNumber)}</strong></td><td>${editable ? `<input class="group-input group-time-input" data-group-start type="datetime-local" value="${escapeHtml(String(setting.startAt || "").replace(" ", "T").slice(0, 16))}" />` : escapeHtml(setting.startAt || "未填写")}</td><td class="number">${editable ? `<input class="group-input group-member-input" data-group-members type="number" min="0" max="1000000" step="1" value="${memberCount || ""}" placeholder="未填写" aria-label="${escapeHtml(groupNumber)} 群人数" />` : (memberCount || "-")}</td><td class="number">${setting.startAt ? new Set(groupOrders.map(order => order.orderKey)).size : "-"}</td><td class="number net-amount">${setting.startAt ? currency(value) : "-"}</td></tr>`;
+  }).join("") || '<tr><td colspan="6"><div class="empty-state"><strong>该月尚未发现客户微信群号</strong><span>管理员可点击“同步订单管理”读取最新数据。</span></div></td></tr>';
 
   const report = buildGroupReport(selectedPrefix);
   elements.configuredGroupCount.textContent = report.groups.length;
   elements.groupTotalValue.textContent = currency(report.total);
   elements.groupAverageValue.textContent = currency(report.average);
-  elements.groupAverageOrders.textContent = plainNumber(report.averageOrders, 1);
+  elements.groupAverageOrders.textContent = report.averageDevelopmentRate === null ? "-" : `${plainNumber(report.averageDevelopmentRate, 1)}%`;
   const missingText = groupOrderSnapshot.missingMonths?.length ? ` · ${groupOrderSnapshot.missingMonths.length} 个月尚未同步` : "";
   elements.groupDataState.textContent = groupOrderSnapshot.updatedAt
     ? `${selectedPrefix ? `${selectedPrefix} 开头 · ` : ""}${groupPeriodLabel()} · ${formatDateTime(groupOrderSnapshot.updatedAt)} · ${visibleOrders.length} 个有群号订单${missingText}`
@@ -820,15 +840,19 @@ function renderGroupAnalysis() {
     const cells = report.productNames.map(name => {
       const product = group.products.get(name) || { quantity: 0, value: 0 };
       const stats = report.productStats.get(name);
-      const state = stats.maximum > 0 && product.value === stats.maximum ? " group-leader" : product.value < stats.average ? " group-below" : "";
-      return `<td class="number group-product-cell${state}" title="${escapeHtml(name)}：${product.quantity} 件，产值 ${currency(product.value)}；群均值 ${currency(stats.average)}">${plainNumber(product.value)}</td>`;
+      const state = stats.maximum > 0 && product.quantity === stats.maximum ? " group-leader" : product.quantity < stats.average ? " group-below" : "";
+      return `<td class="number group-product-cell${state}" title="${escapeHtml(name)}：${plainNumber(product.quantity)} 件，产品产值 ${currency(product.value)}；群均 ${plainNumber(stats.average, 1)} 件">${plainNumber(product.quantity)}</td>`;
     }).join("");
     const insight = groupSuggestion(group, report);
-    return `<tr><td><strong>${escapeHtml(group.employeeName)}</strong></td><td><strong class="group-number">${escapeHtml(group.groupNumber)}</strong></td><td>${escapeHtml(group.startAt.slice(0, 16))}</td><td class="number">${group.orders.size}</td><td class="number${totalClass}"><button class="group-insight" type="button" title="${escapeHtml(insight)}">${escapeHtml(currency(group.value))}<span aria-hidden="true">i</span></button></td>${cells}</tr>`;
+    const rateClass = group.developmentRate !== null && report.averageDevelopmentRate !== null && group.developmentRate < report.averageDevelopmentRate ? " group-below" : "";
+    return `<tr><td><strong>${escapeHtml(group.employeeName)}</strong></td><td><strong class="group-number">${escapeHtml(group.groupNumber)}</strong></td><td>${escapeHtml(group.startAt.slice(0, 16))}</td><td class="number">${group.memberCount || "-"}</td><td class="number">${group.orders.size}</td><td class="number">${currency(group.monthValue)}</td><td class="number${totalClass}"><button class="group-insight" type="button" title="${escapeHtml(insight)}">${escapeHtml(currency(group.value))}<span aria-hidden="true">i</span></button></td><td class="number">${plainNumber(group.productQuantity)}</td><td class="number">${group.productTypes}</td><td class="number">${plainNumber(group.productShare, 1)}%</td><td class="number${rateClass}" title="区间去重订单数 ${group.orders.size} ÷ 群人数 ${group.memberCount || "未填写"}">${group.developmentRate === null ? "-" : `${plainNumber(group.developmentRate, 1)}%`}</td>${cells}</tr>`;
   }).join("");
   const averages = report.productNames.map(name => `<td class="number group-average-cell">${plainNumber(report.productStats.get(name).average)}</td>`).join("");
-  const tableWidth = 620 + report.productNames.length * 130;
-  elements.groupComparison.innerHTML = `<div class="group-legend"><span><i class="legend-swatch below"></i>低于均值</span><span><i class="legend-swatch leader"></i>区间第一</span><span>产值金额可悬停查看 AI 分析建议</span></div><div class="table-wrap"><table class="group-comparison-table" style="min-width:${tableWidth}px"><thead><tr><th>员工姓名</th><th>群号</th><th>接群时间</th><th class="number">订单数</th><th class="number">群总产值</th>${headers}</tr></thead><tbody>${rows}</tbody><tfoot><tr><td></td><td><strong>群均值</strong></td><td></td><td class="number">${plainNumber(report.averageOrders, 1)}</td><td class="number">${currency(report.average)}</td>${averages}</tr></tfoot></table></div>`;
+  const tableWidth = 1250 + report.productNames.length * 130;
+  const averageQuantity = report.groups.length ? report.groups.reduce((sum, group) => sum + group.productQuantity, 0) / report.groups.length : 0;
+  const averageTypes = report.groups.length ? report.groups.reduce((sum, group) => sum + group.productTypes, 0) / report.groups.length : 0;
+  const averageMonthValue = report.groups.length ? report.groups.reduce((sum, group) => sum + group.monthValue, 0) / report.groups.length : 0;
+  elements.groupComparison.innerHTML = `<div class="group-legend"><span><i class="legend-swatch below"></i>低于均值</span><span><i class="legend-swatch leader"></i>区间第一</span><span>产品列显示件数；悬停累计总业绩可查看分析建议</span></div><div class="table-wrap"><table class="group-comparison-table" style="min-width:${tableWidth}px"><thead><tr><th>员工姓名</th><th>群号</th><th>接群时间</th><th class="number">群人数</th><th class="number">区间订单</th><th class="number">单月业绩</th><th class="number">累计总业绩</th><th class="number">产品总件数</th><th class="number">开发单品种类</th><th class="number">产品开发占比</th><th class="number">群内开发率</th>${headers}</tr></thead><tbody>${rows}</tbody><tfoot><tr><td></td><td><strong>群均值</strong></td><td></td><td></td><td class="number">${plainNumber(report.averageOrders, 1)}</td><td class="number">${currency(averageMonthValue)}</td><td class="number">${currency(report.average)}</td><td class="number">${plainNumber(averageQuantity, 1)}</td><td class="number">${plainNumber(averageTypes, 1)}</td><td class="number">${plainNumber(report.averageProductShare, 1)}%</td><td class="number">${report.averageDevelopmentRate === null ? "-" : `${plainNumber(report.averageDevelopmentRate, 1)}%`}</td>${averages}</tr></tfoot></table></div>`;
 }
 
 function buildAnnualStaffRows(report) {
@@ -937,6 +961,7 @@ async function saveGroupAssignmentSettings() {
     groupNumber: row.dataset.groupAssignment,
     employeeName: row.querySelector("[data-group-employee]")?.value.trim() || "",
     startAt: row.querySelector("[data-group-start]")?.value || "",
+    memberCount: Math.max(0, Math.trunc(amount(row.querySelector("[data-group-members]")?.value))),
   }));
   const merged = new Map((groupAssignments.assignments || []).map(item => [item.groupNumber, item]));
   updates.forEach(item => merged.set(item.groupNumber, item));
@@ -945,7 +970,7 @@ async function saveGroupAssignmentSettings() {
   try {
     groupAssignments = await fetchJson("/api/group-assignments", { method: "POST", body: JSON.stringify({ assignments }) });
     renderGroupAnalysis();
-    showToast("群号归属和接群时间已保存，群产值已重新计算");
+    showToast("群号归属、群人数和接群时间已保存，群数据已重新计算");
   } catch (error) { showToast(`保存失败：${error.message}`); }
   finally { elements.saveGroupAssignments.disabled = false; }
 }
