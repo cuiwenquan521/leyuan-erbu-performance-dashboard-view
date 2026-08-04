@@ -423,7 +423,7 @@ function render() {
   elements.productBody.innerHTML = analysisReport.products.map((product, index) => {
     const staffDetails = [...product.staff.values()].sort((a, b) => b.net - a.net).map(item => `<div><span>${escapeHtml(item.name)}</span><strong>${item.orders.size} 单 / ${item.quantity} 件</strong><span>业绩 ${currency(item.gross)}</span><strong class="net-amount">净值 ${currency(item.net)}</strong></div>`).join("");
     return `<tr><td><button class="details-toggle" type="button" data-product-toggle="${index}" aria-expanded="false" title="查看员工产品明细">＋</button><span class="product-name">${escapeHtml(product.name)}</span>${product.codes.size ? `<span class="product-code">${escapeHtml([...product.codes].join(" / "))}</span>` : ""}</td><td class="number">${product.orderCount}</td><td class="number">${product.quantity}</td><td class="number">${currency(product.gross)}</td><td class="number refund-amount">${currency(product.refund)}</td><td class="number net-amount">${currency(product.net)}</td><td><span class="analysis-label ${product.analysis.type}">${escapeHtml(product.analysis.text)}</span></td></tr><tr class="detail-row" data-product-detail="${index}" hidden><td colspan="7"><div class="detail-panel"><h3>员工销售明细</h3><div class="detail-grid">${staffDetails}</div></div></td></tr>`;
-  }).join("");
+  }).join("") || `<tr><td colspan="7"><div class="empty-state"><div class="empty-icon" aria-hidden="true">月</div><strong>${escapeHtml(analysisMonth.replace("-", "年"))}月暂无产品数据</strong><span>该月份尚未生成每日存档，后续存档后会自动纳入月度产品分析。</span></div></td></tr>`;
 
   const staffAverage = analysisReport.staff.length ? analysisReport.totals.net / analysisReport.staff.length : 0;
   const topNet = analysisReport.staff[0]?.net || 0;
