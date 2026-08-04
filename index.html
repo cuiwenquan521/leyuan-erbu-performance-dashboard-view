@@ -133,7 +133,11 @@
         <section class="data-section">
           <div class="section-heading">
             <div><h2>产品净值分析</h2><p>重点方向结合净值与订单量；低于均值展示可验证的数据原因</p></div>
-            <span id="allocationState" class="section-status">订单净值按件数分摊</span>
+            <div class="product-period-control">
+              <label for="productMonth">产品月份</label>
+              <input id="productMonth" type="month" />
+              <span id="allocationState" class="section-status">订单净值按件数分摊</span>
+            </div>
           </div>
           <div class="table-wrap">
             <table class="product-table">

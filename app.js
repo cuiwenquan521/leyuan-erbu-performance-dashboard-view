@@ -28,6 +28,7 @@ const elements = {
   productNetAverage: document.querySelector("#productNetAverage"),
   focusProductCount: document.querySelector("#focusProductCount"),
   overallRefundRate: document.querySelector("#overallRefundRate"),
+  productMonth: document.querySelector("#productMonth"),
   allocationState: document.querySelector("#allocationState"),
   productBody: document.querySelector("#productBody"),
   staffNetAverage: document.querySelector("#staffNetAverage"),
@@ -418,7 +419,7 @@ function render() {
   elements.focusProductCount.textContent = focusCount;
   elements.overallRefundRate.textContent = percent(analysisReport.overallRefundRate);
   const analysisMonth = analysisReport.month || date.slice(0, 7);
-  elements.allocationState.textContent = `${analysisMonth.replace("-", "年")}月 · ${analysisReport.estimatedProducts ? "含估算净值" : "ERP 流水金额"}`;
+  elements.allocationState.textContent = `${analysisMonth.replace("-", "年")}月｜${shortWindow(monthWindow(analysisMonth))} · ${analysisReport.estimatedProducts ? "含估算净值" : "ERP 流水金额"}`;
   elements.productBody.innerHTML = analysisReport.products.map((product, index) => {
     const staffDetails = [...product.staff.values()].sort((a, b) => b.net - a.net).map(item => `<div><span>${escapeHtml(item.name)}</span><strong>${item.orders.size} 单 / ${item.quantity} 件</strong><span>业绩 ${currency(item.gross)}</span><strong class="net-amount">净值 ${currency(item.net)}</strong></div>`).join("");
     return `<tr><td><button class="details-toggle" type="button" data-product-toggle="${index}" aria-expanded="false" title="查看员工产品明细">＋</button><span class="product-name">${escapeHtml(product.name)}</span>${product.codes.size ? `<span class="product-code">${escapeHtml([...product.codes].join(" / "))}</span>` : ""}</td><td class="number">${product.orderCount}</td><td class="number">${product.quantity}</td><td class="number">${currency(product.gross)}</td><td class="number refund-amount">${currency(product.refund)}</td><td class="number net-amount">${currency(product.net)}</td><td><span class="analysis-label ${product.analysis.type}">${escapeHtml(product.analysis.text)}</span></td></tr><tr class="detail-row" data-product-detail="${index}" hidden><td colspan="7"><div class="detail-panel"><h3>员工销售明细</h3><div class="detail-grid">${staffDetails}</div></div></td></tr>`;
@@ -621,6 +622,7 @@ function monthWindow(month) {
 async function loadMonthlyReport() {
   const month = elements.reportMonth.value;
   if (!month) return;
+  elements.productMonth.value = month;
   try {
     if (!archivesMeta.length) await loadArchives();
     const metas = archivesMeta.filter(archive => archive.date.startsWith(month) && isReportingDate(archive.date));
@@ -1454,6 +1456,11 @@ elements.staffComparison.addEventListener("click", event => {
   detail.hidden = expanded;
 });
 elements.reportMonth.addEventListener("change", loadMonthlyReport);
+elements.productMonth.addEventListener("change", async () => {
+  if (!elements.productMonth.value) return;
+  elements.reportMonth.value = elements.productMonth.value;
+  await loadMonthlyReport();
+});
 elements.saveTargets.addEventListener("click", saveMonthlyTargets);
 elements.groupMonth.addEventListener("change", () => {
   groupRangeActive = false;
@@ -1483,6 +1490,7 @@ const today = normalizeReportingDate(localDateString());
 const savedDate = localStorage.getItem(DATE_KEY);
 elements.date.value = normalizeReportingDate(window.STATIC_DEFAULT_DATE || (savedDate === today ? savedDate : today));
 elements.reportMonth.value = elements.date.value.slice(0, 7);
+elements.productMonth.value = elements.reportMonth.value;
 elements.phaseMonth.value = elements.date.value.slice(0, 7);
 elements.groupMonth.value = elements.date.value.slice(0, 7);
 try {

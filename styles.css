@@ -89,6 +89,10 @@ main { max-width: 1480px; margin: 0 auto; padding: 20px 26px 24px; }
 .section-heading p { margin: 5px 0 0; color: var(--muted); font-size: 12px; }
 .section-status { flex: 0 0 auto; color: var(--muted); font-size: 11px; }
 .section-status.saved { color: var(--primary); }
+.product-period-control { display: flex; align-items: center; justify-content: flex-end; gap: 9px; flex-wrap: wrap; }
+.product-period-control label { color: var(--muted); font-size: 12px; }
+.product-period-control input { width: 145px; height: 34px; padding: 0 9px; color: #24313d; background: #fff; border: 1px solid #c8d1d8; border-radius: 4px; }
+.product-period-control .section-status { flex-basis: 100%; text-align: right; white-space: normal; }
 
 .table-wrap { position: relative; overflow-x: auto; }
 table { width: 100%; min-width: 1040px; border-collapse: collapse; table-layout: fixed; }
