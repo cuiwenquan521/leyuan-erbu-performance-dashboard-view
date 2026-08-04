@@ -280,13 +280,18 @@ tbody tr:hover { background: #f8fbfa; }
 .group-empty { min-height: 180px; border: 1px dashed #c5d1d7; }
 .group-legend { padding: 0 2px 10px; display: flex; align-items: center; gap: 18px; color: var(--muted); font-size: 11px; }
 .group-legend span { display: inline-flex; align-items: center; gap: 5px; }
-.group-comparison-table { min-width: 980px; border-collapse: separate; border-spacing: 0; }
+.group-comparison-table { border-collapse: separate; border-spacing: 0; table-layout: fixed; }
 .group-comparison-table th, .group-comparison-table td { height: 43px; padding: 7px 10px; border-right: 1px solid #b9cbd4; border-bottom: 1px solid #b9cbd4; white-space: nowrap; }
 .group-comparison-table th:first-child, .group-comparison-table td:first-child { border-left: 1px solid #b9cbd4; }
 .group-comparison-table thead th { background: #f3d9d7; border-top: 1px solid #b9cbd4; font-size: 13px; font-weight: 800; }
 .group-comparison-table tbody tr:nth-child(odd) td { background: #eef8fc; }
 .group-comparison-table tbody tr:nth-child(even) td { background: #e3f2f8; }
 .group-comparison-table tfoot td { background: #d2eaf3; font-weight: 800; }
+.group-comparison-table th:nth-child(1), .group-comparison-table td:nth-child(1) { width: 120px; min-width: 120px; }
+.group-comparison-table th:nth-child(2), .group-comparison-table td:nth-child(2) { width: 90px; min-width: 90px; }
+.group-comparison-table th:nth-child(3), .group-comparison-table td:nth-child(3) { width: 170px; min-width: 170px; }
+.group-comparison-table th:nth-child(4), .group-comparison-table td:nth-child(4) { width: 80px; min-width: 80px; }
+.group-comparison-table th:nth-child(5), .group-comparison-table td:nth-child(5) { width: 130px; min-width: 130px; }
 .group-product-head { width: 130px; max-width: 130px; }
 .group-product-head span { display: block; overflow: hidden; text-overflow: ellipsis; }
 .group-comparison-table td.group-below { background: #fff0b8 !important; color: #6f5200; font-weight: 800; }
@@ -374,6 +379,8 @@ footer { padding: 14px 2px 0; display: flex; justify-content: space-between; gap
   .phase-toolbar > * { width: 100%; }
   .phase-toolbar .compact-field input { width: 100%; }
   .group-toolbar > * { width: 100%; }
+  .group-analysis-heading { display: block; }
+  .group-analysis-heading .section-status { display: block; margin-top: 8px; }
   .group-metrics { margin-left: 9px; margin-right: 9px; }
   .group-comparison { padding: 9px; }
   .phase-chart { padding-left: 6px; padding-right: 6px; }
