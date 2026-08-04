@@ -173,6 +173,33 @@
             </table>
           </div>
         </section>
+
+        <section class="data-section group-analysis-section">
+          <div class="section-heading group-analysis-heading">
+            <div><h2>员工群产值对比分析</h2><p>从 ERP 订单管理读取客户微信群；填写接群时间后，按月统计群实收净值与单品开发情况</p></div>
+            <span id="groupDataState" class="section-status">尚未载入订单管理数据</span>
+          </div>
+          <div class="group-toolbar">
+            <div class="field-group compact-field"><label for="groupMonth">分析月份</label><input id="groupMonth" type="month" /></div>
+            <button id="syncGroupOrders" class="button" type="button">↻ 同步订单管理</button>
+            <button id="saveGroupAssignments" class="button primary" type="button">保存群号与接群时间</button>
+            <p>未填写接群时间的群不计入对比；员工查看账号只能查看。</p>
+          </div>
+          <datalist id="groupStaffNames"></datalist>
+          <div class="table-wrap group-config-wrap">
+            <table class="group-config-table">
+              <thead><tr><th>员工姓名</th><th>客户微信群号</th><th>接群时间</th><th class="number">该月订单</th><th class="number">该月群产值</th></tr></thead>
+              <tbody id="groupAssignmentBody"></tbody>
+            </table>
+          </div>
+          <div class="analysis-strip four group-metrics">
+            <div><span>已配置群数</span><strong id="configuredGroupCount">0</strong></div>
+            <div><span>群总产值</span><strong id="groupTotalValue">¥0.00</strong></div>
+            <div><span>群产值均值</span><strong id="groupAverageValue">¥0.00</strong></div>
+            <div><span>群订单均值</span><strong id="groupAverageOrders">0</strong></div>
+          </div>
+          <div id="groupComparison" class="group-comparison"></div>
+        </section>
       </section>
 
       <section id="monthlyView" class="view">

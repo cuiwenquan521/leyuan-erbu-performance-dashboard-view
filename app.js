@@ -34,6 +34,17 @@ const elements = {
   teamOrderAverage: document.querySelector("#teamOrderAverage"),
   staffComparison: document.querySelector("#staffComparison"),
   staffAnalysisPeriod: document.querySelector("#staffAnalysisPeriod"),
+  groupMonth: document.querySelector("#groupMonth"),
+  syncGroupOrders: document.querySelector("#syncGroupOrders"),
+  saveGroupAssignments: document.querySelector("#saveGroupAssignments"),
+  groupDataState: document.querySelector("#groupDataState"),
+  groupAssignmentBody: document.querySelector("#groupAssignmentBody"),
+  configuredGroupCount: document.querySelector("#configuredGroupCount"),
+  groupTotalValue: document.querySelector("#groupTotalValue"),
+  groupAverageValue: document.querySelector("#groupAverageValue"),
+  groupAverageOrders: document.querySelector("#groupAverageOrders"),
+  groupComparison: document.querySelector("#groupComparison"),
+  groupStaffNames: document.querySelector("#groupStaffNames"),
   reportMonth: document.querySelector("#reportMonth"),
   teamTarget: document.querySelector("#teamTarget"),
   saveTargets: document.querySelector("#saveTargets"),
@@ -74,6 +85,8 @@ let monthlyReport = null;
 let monthlyTargets = { teamTarget: 0, staffTargets: {} };
 let monthlyRankMode = "performance";
 let phaseReport = null;
+let groupOrderSnapshot = { month: "", updatedAt: "", orders: [] };
+let groupAssignments = { assignments: [] };
 let reportSettings = { firstDayStart: "00:00", cutoffTime: "18:00", autoDelayMinutes: 5 };
 let archivesMeta = [];
 let toastTimer;
@@ -82,6 +95,10 @@ let publicViewOnly = false;
 
 function targetsEditable() {
   return !publicViewOnly || Boolean(window.STATIC_ARCHIVE_MODE && window.STATIC_USER_ROLE === "admin");
+}
+
+function groupAssignmentsEditable() {
+  return !publicViewOnly;
 }
 
 function staffWithRoster(staff) {
