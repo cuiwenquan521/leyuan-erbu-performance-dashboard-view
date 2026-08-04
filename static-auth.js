@@ -110,6 +110,10 @@
         const month = url.searchParams.get("month") || "";
         return jsonResponse(payload.groupOrders?.[month] || { month, source: "尚未同步", updatedAt: "", count: 0, orders: [] });
       }
+      if (url.pathname === "/api/annual-performance") {
+        const year = url.searchParams.get("year") || "";
+        return jsonResponse(payload.annualPerformance?.[year] || { year: Number(year), source: "尚未同步", updatedAt: "", activeEmployees: [], months: {} });
+      }
       if (url.pathname === "/api/archives") return jsonResponse({ archives: payload.archivesMeta });
       if (url.pathname === "/api/targets") {
         const month = url.searchParams.get("month") || "";

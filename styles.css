@@ -300,6 +300,35 @@ tbody tr:hover { background: #f8fbfa; }
 .group-insight span { width: 15px; height: 15px; display: inline-grid; place-items: center; color: #fff; background: #557788; border-radius: 50%; font-family: Georgia,serif; font-size: 10px; }
 .group-average-cell { color: #344d5a; }
 
+.annual-toolbar { min-height: 76px; padding: 12px 16px; display: flex; align-items: end; gap: 12px; background: #fff; border: 1px solid var(--border); border-radius: 6px; }
+.annual-toolbar p { margin: 0 0 8px auto; color: var(--muted); font-size: 12px; }
+.annual-metrics { margin-top: 14px; }
+.annual-month-section, .annual-staff-section { margin-top: 14px; }
+.annual-month-table { width: 100%; table-layout: fixed; }
+.annual-month-table th, .annual-month-table td { padding: 10px 14px; border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+.annual-month-table th:last-child, .annual-month-table td:last-child { border-right: 0; }
+.annual-month-table thead th { background: #f1f4f6; font-weight: 800; }
+.annual-month-table tbody tr:nth-child(even) td { background: #f7fafb; }
+.annual-month-table tfoot td { background: #d9edf4; font-weight: 800; }
+.annual-staff-heading { gap: 16px; }
+.annual-staff-wrap { max-height: 650px; }
+.annual-staff-table { min-width: 1780px; border-collapse: separate; border-spacing: 0; table-layout: fixed; }
+.annual-staff-table th, .annual-staff-table td { height: 44px; padding: 8px 10px; border-right: 1px solid #bdccd4; border-bottom: 1px solid #bdccd4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.annual-staff-table th:first-child, .annual-staff-table td:first-child { width: 110px; min-width: 110px; position: sticky; left: 0; z-index: 3; }
+.annual-staff-table th:nth-child(2), .annual-staff-table td:nth-child(2) { width: 82px; min-width: 82px; position: sticky; left: 110px; z-index: 3; }
+.annual-staff-table th:nth-child(3), .annual-staff-table td:nth-child(3) { width: 210px; min-width: 210px; position: sticky; left: 192px; z-index: 3; }
+.annual-staff-table th:nth-child(n+4) { width: 105px; }
+.annual-staff-table thead th { position: sticky; top: 0; z-index: 4; background: #f2d6d4; font-weight: 800; }
+.annual-staff-table thead th:nth-child(-n+3) { z-index: 6; }
+.annual-staff-table tbody td { background: #edf7fb; }
+.annual-staff-table tbody tr:nth-child(even) td { background: #e3f2f8; }
+.annual-staff-table tbody .annual-former-row td { background: #fff7df; }
+.annual-staff-table tfoot td { position: sticky; bottom: 0; z-index: 4; background: #d0e9f2; font-weight: 800; }
+.annual-staff-table tfoot td:nth-child(-n+3) { z-index: 5; }
+.staff-status { display: inline-flex; min-width: 44px; justify-content: center; padding: 3px 7px; border-radius: 3px; font-size: 11px; font-weight: 800; }
+.staff-status.active { color: #126b58; background: #e3f4ef; border: 1px solid #a9d4c8; }
+.staff-status.former { color: #7e5a08; background: #fff0c7; border: 1px solid #e3ca84; }
+
 .empty-state { min-height: 250px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px; color: var(--muted); }
 .empty-icon { width: 41px; height: 41px; display: grid; place-items: center; color: #7c8994; border: 1px solid #bcc7cf; border-radius: 5px; }
 .empty-state strong { color: #3c4955; }
@@ -343,6 +372,8 @@ footer { padding: 14px 2px 0; display: flex; justify-content: space-between; gap
   .phase-toolbar p { width: 100%; margin-left: 0; }
   .group-toolbar { align-items: stretch; flex-wrap: wrap; }
   .group-toolbar p { width: 100%; margin-left: 0; }
+  .annual-toolbar { align-items: stretch; flex-wrap: wrap; }
+  .annual-toolbar p { width: 100%; margin-left: 0; }
 }
 
 @media (max-width: 620px) {
@@ -383,6 +414,9 @@ footer { padding: 14px 2px 0; display: flex; justify-content: space-between; gap
   .group-analysis-heading .section-status { display: block; margin-top: 8px; }
   .group-metrics { margin-left: 9px; margin-right: 9px; }
   .group-comparison { padding: 9px; }
+  .annual-toolbar > * { width: 100%; }
+  .annual-staff-heading { display: block; }
+  .annual-staff-heading .button { width: 100%; margin-top: 10px; }
   .phase-chart { padding-left: 6px; padding-right: 6px; }
   .phase-table-wrap { max-height: 560px; }
   .phase-table .phase-fixed-3, .phase-table .phase-fixed-4, .phase-table .phase-fixed-5,

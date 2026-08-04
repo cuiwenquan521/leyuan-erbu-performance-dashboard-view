@@ -73,6 +73,19 @@ const elements = {
   archiveBody: document.querySelector("#archiveBody"),
   archiveEmpty: document.querySelector("#archiveEmpty"),
   archiveScheduleDescription: document.querySelector("#archiveScheduleDescription"),
+  annualYear: document.querySelector("#annualYear"),
+  syncAnnualPerformance: document.querySelector("#syncAnnualPerformance"),
+  annualNet: document.querySelector("#annualNet"),
+  annualMonthCount: document.querySelector("#annualMonthCount"),
+  annualActiveCount: document.querySelector("#annualActiveCount"),
+  annualFormerNet: document.querySelector("#annualFormerNet"),
+  annualDataState: document.querySelector("#annualDataState"),
+  annualMonthBody: document.querySelector("#annualMonthBody"),
+  annualMonthFoot: document.querySelector("#annualMonthFoot"),
+  toggleFormerStaff: document.querySelector("#toggleFormerStaff"),
+  annualStaffHead: document.querySelector("#annualStaffHead"),
+  annualStaffBody: document.querySelector("#annualStaffBody"),
+  annualStaffFoot: document.querySelector("#annualStaffFoot"),
   autoScheduleText: document.querySelector("#autoScheduleText"),
   toast: document.querySelector("#toast"),
 };
@@ -87,6 +100,8 @@ let monthlyRankMode = "performance";
 let phaseReport = null;
 let groupOrderSnapshot = { month: "", updatedAt: "", orders: [] };
 let groupAssignments = { assignments: [] };
+let annualReport = null;
+let showFormerStaff = false;
 let reportSettings = { firstDayStart: "00:00", cutoffTime: "18:00", autoDelayMinutes: 5 };
 let archivesMeta = [];
 let toastTimer;
@@ -469,6 +484,7 @@ function setPublicViewOnly(enabled) {
   [elements.syncGroupOrders, elements.saveGroupAssignments].forEach(control => {
     if (control) control.hidden = publicViewOnly;
   });
+  if (elements.syncAnnualPerformance) elements.syncAnnualPerformance.hidden = publicViewOnly;
   if (elements.saveTargets) elements.saveTargets.hidden = publicViewOnly && !canEditTargets;
   if (elements.teamTarget) elements.teamTarget.disabled = !canEditTargets;
   document.querySelectorAll(".target-input").forEach(input => {
@@ -738,6 +754,76 @@ function renderGroupAnalysis() {
   const averages = report.productNames.map(name => `<td class="number group-average-cell">${plainNumber(report.productStats.get(name).average)}</td>`).join("");
   const tableWidth = 620 + report.productNames.length * 130;
   elements.groupComparison.innerHTML = `<div class="group-legend"><span><i class="legend-swatch below"></i>低于均值</span><span><i class="legend-swatch leader"></i>区间第一</span><span>产值金额可悬停查看 AI 分析建议</span></div><div class="table-wrap"><table class="group-comparison-table" style="min-width:${tableWidth}px"><thead><tr><th>员工姓名</th><th>群号</th><th>接群时间</th><th class="number">订单数</th><th class="number">群总产值</th>${headers}</tr></thead><tbody>${rows}</tbody><tfoot><tr><td></td><td><strong>群均值</strong></td><td></td><td class="number">${plainNumber(report.averageOrders, 1)}</td><td class="number">${currency(report.average)}</td>${averages}</tr></tfoot></table></div>`;
+}
+
+function buildAnnualStaffRows(report) {
+  const activeByName = new Map((report.activeEmployees || []).map(person => [person.name, person]));
+  const rows = new Map([...activeByName].map(([name, person]) => [name, { name, department: person.department || "乐源服务二部", active: true, months: {}, total: 0 }]));
+  Object.values(report.months || {}).forEach(month => (month.staff || []).forEach(person => {
+    const row = rows.get(person.name) || { name: person.name, department: person.department || "历史部门", active: activeByName.has(person.name), months: {}, total: 0 };
+    row.department = activeByName.get(person.name)?.department || person.department || row.department;
+    row.months[month.month] = amount(person.net);
+    row.total += amount(person.net);
+    rows.set(person.name, row);
+  }));
+  return [...rows.values()].sort((left, right) => Number(right.active) - Number(left.active) || right.total - left.total || left.name.localeCompare(right.name, "zh-CN"));
+}
+
+function renderAnnualPerformance() {
+  const report = annualReport || { year: Number(elements.annualYear.value), updatedAt: "", activeEmployees: [], months: {} };
+  const monthKeys = Array.from({ length: 12 }, (_, index) => `${report.year}-${String(index + 1).padStart(2, "0")}`);
+  const availableMonths = monthKeys.filter(month => report.months?.[month]);
+  const rows = buildAnnualStaffRows(report);
+  const activeRows = rows.filter(person => person.active);
+  const formerRows = rows.filter(person => !person.active);
+  const annualGross = availableMonths.reduce((sum, month) => sum + amount(report.months[month].gross), 0);
+  const annualRefund = availableMonths.reduce((sum, month) => sum + amount(report.months[month].refund), 0);
+  const annualNet = annualGross - annualRefund;
+  const formerNet = formerRows.reduce((sum, person) => sum + person.total, 0);
+  elements.annualNet.textContent = currency(annualNet);
+  elements.annualMonthCount.textContent = availableMonths.length;
+  elements.annualActiveCount.textContent = activeRows.length;
+  elements.annualFormerNet.textContent = currency(formerNet);
+  elements.annualDataState.textContent = report.updatedAt ? `${report.year} 年 · ${formatDateTime(report.updatedAt)} · ${report.source}` : "尚未拉取年度数据";
+  elements.annualMonthBody.innerHTML = monthKeys.map((month, index) => {
+    const item = report.months?.[month];
+    return `<tr><td><strong>${index + 1} 月</strong></td><td class="number">${item ? currency(item.gross) : "-"}</td><td class="number refund-amount">${item ? currency(item.refund) : "-"}</td><td class="number net-amount">${item ? currency(item.net) : "-"}</td><td class="number">${item ? item.staff.length : "-"}</td></tr>`;
+  }).join("");
+  elements.annualMonthFoot.innerHTML = `<tr><td><strong>年度汇总</strong></td><td class="number">${currency(annualGross)}</td><td class="number refund-amount">${currency(annualRefund)}</td><td class="number net-amount">${currency(annualNet)}</td><td class="number">${rows.length}</td></tr>`;
+
+  elements.toggleFormerStaff.textContent = `${showFormerStaff ? "隐藏" : "显示"}离职人员（${formerRows.length}）`;
+  elements.toggleFormerStaff.setAttribute("aria-expanded", String(showFormerStaff));
+  elements.toggleFormerStaff.disabled = formerRows.length === 0;
+  elements.annualStaffHead.innerHTML = `<tr><th>员工姓名</th><th>人员状态</th><th>所属部门</th>${monthKeys.map((_, index) => `<th class="number">${index + 1} 月</th>`).join("")}<th class="number">年度合计</th></tr>`;
+  const visibleRows = showFormerStaff ? rows : activeRows;
+  elements.annualStaffBody.innerHTML = visibleRows.map(person => `<tr class="${person.active ? "annual-active-row" : "annual-former-row"}"><td><strong>${escapeHtml(person.name)}</strong></td><td><span class="staff-status ${person.active ? "active" : "former"}">${person.active ? "在岗" : "离职"}</span></td><td title="${escapeHtml(person.department)}">${escapeHtml(person.department)}</td>${monthKeys.map(month => `<td class="number">${report.months?.[month] ? currency(person.months[month] || 0) : "-"}</td>`).join("")}<td class="number net-amount"><strong>${currency(person.total)}</strong></td></tr>`).join("") || '<tr><td colspan="16"><div class="empty-state"><strong>尚无年度人员数据</strong></div></td></tr>';
+  elements.annualStaffFoot.innerHTML = `<tr><td><strong>合计（含离职）</strong></td><td></td><td></td>${monthKeys.map(month => `<td class="number">${report.months?.[month] ? currency(report.months[month].net) : "-"}</td>`).join("")}<td class="number">${currency(annualNet)}</td></tr>`;
+}
+
+async function loadAnnualPerformance() {
+  const year = Number(elements.annualYear.value);
+  if (!year) return;
+  try {
+    annualReport = await fetchJson(`/api/annual-performance?year=${encodeURIComponent(year)}`);
+    showFormerStaff = false;
+    renderAnnualPerformance();
+  } catch (error) { showToast(`年度业绩加载失败：${error.message}`); }
+}
+
+async function syncAnnualPerformanceData() {
+  const year = Number(elements.annualYear.value);
+  elements.syncAnnualPerformance.disabled = true;
+  elements.syncAnnualPerformance.classList.add("is-refreshing");
+  try {
+    annualReport = await fetchJson("/api/annual-sync", { method: "POST", body: JSON.stringify({ year }) });
+    showFormerStaff = false;
+    renderAnnualPerformance();
+    showToast(`${year} 年度业绩已按月拉取完成，共 ${Object.keys(annualReport.months || {}).length} 个月`);
+  } catch (error) { showToast(`年度业绩拉取失败：${error.message}`); }
+  finally {
+    elements.syncAnnualPerformance.disabled = false;
+    elements.syncAnnualPerformance.classList.remove("is-refreshing");
+  }
 }
 
 async function loadGroupAnalysis() {
@@ -1153,6 +1239,7 @@ function activateView(name) {
     loadGroupAnalysis();
   }
   if (name === "archives") loadArchives();
+  if (name === "annual") loadAnnualPerformance();
 }
 
 function showToast(message) {
@@ -1224,6 +1311,12 @@ elements.saveTargets.addEventListener("click", saveMonthlyTargets);
 elements.groupMonth.addEventListener("change", loadGroupAnalysis);
 elements.syncGroupOrders.addEventListener("click", syncGroupOrderData);
 elements.saveGroupAssignments.addEventListener("click", saveGroupAssignmentSettings);
+elements.annualYear.addEventListener("change", loadAnnualPerformance);
+elements.syncAnnualPerformance.addEventListener("click", syncAnnualPerformanceData);
+elements.toggleFormerStaff.addEventListener("click", () => {
+  showFormerStaff = !showFormerStaff;
+  renderAnnualPerformance();
+});
 elements.phaseMonth.addEventListener("change", loadPhaseReport);
 elements.savePhaseSettings.addEventListener("click", savePhaseSettings);
 document.querySelectorAll(".rank-tab").forEach(tab => tab.addEventListener("click", () => {
@@ -1238,6 +1331,7 @@ elements.date.value = normalizeReportingDate(window.STATIC_DEFAULT_DATE || (save
 elements.reportMonth.value = elements.date.value.slice(0, 7);
 elements.phaseMonth.value = elements.date.value.slice(0, 7);
 elements.groupMonth.value = elements.date.value.slice(0, 7);
+elements.annualYear.value = String(new Date().getFullYear());
 async function initialize() {
   try { reportSettings = await fetchJson("/api/report-settings"); } catch {}
   currentRecords = demoData;

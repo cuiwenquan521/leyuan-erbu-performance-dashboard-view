@@ -59,6 +59,7 @@
         <button class="tab" type="button" data-view="monthly">月度汇总</button>
         <button class="tab" type="button" data-view="products">产品分析</button>
         <button class="tab" type="button" data-view="archives">每日存档</button>
+        <button class="tab" type="button" data-view="annual">年度业绩</button>
       </nav>
 
       <section id="overviewView" class="view active">
@@ -286,6 +287,31 @@
             </table>
             <div id="archiveEmpty" class="empty-state" hidden><div class="empty-icon" aria-hidden="true">档</div><strong>暂无存档</strong><span>自动同步或第一次手动刷新后会生成。</span></div>
           </div>
+        </section>
+      </section>
+
+      <section id="annualView" class="view">
+        <section class="annual-toolbar">
+          <div class="field-group compact-field"><label for="annualYear">统计年份</label><input id="annualYear" type="number" min="2020" max="2100" step="1" /></div>
+          <button id="syncAnnualPerformance" class="button primary" type="button">↻ 拉取年度业绩</button>
+          <p>逐月读取 ERP 个人业绩流水；当前工作台名单用于区分在岗与离职人员。</p>
+        </section>
+        <div class="analysis-strip four annual-metrics">
+          <div><span>年度净业绩</span><strong id="annualNet">¥0.00</strong></div>
+          <div><span>已统计月份</span><strong id="annualMonthCount">0</strong></div>
+          <div><span>当前在岗人数</span><strong id="annualActiveCount">0</strong></div>
+          <div><span>离职人员历史业绩</span><strong id="annualFormerNet">¥0.00</strong></div>
+        </div>
+        <section class="data-section annual-month-section">
+          <div class="section-heading"><div><h2>每月业绩汇总</h2><p>每个月的业绩、退款与净业绩分别列出，年度合计包含离职人员历史业绩</p></div><span id="annualDataState" class="section-status">尚未拉取年度数据</span></div>
+          <div class="table-wrap"><table class="annual-month-table"><thead><tr><th>月份</th><th class="number">业绩</th><th class="number">退款</th><th class="number">净业绩</th><th class="number">有业绩人员</th></tr></thead><tbody id="annualMonthBody"></tbody><tfoot id="annualMonthFoot"></tfoot></table></div>
+        </section>
+        <section class="data-section annual-staff-section">
+          <div class="section-heading annual-staff-heading">
+            <div><h2>人员年度业绩明细</h2><p>在岗人员默认显示；离职人员默认折叠，但始终计入每月和年度合计</p></div>
+            <button id="toggleFormerStaff" class="button secondary" type="button" aria-expanded="false">显示离职人员</button>
+          </div>
+          <div class="table-wrap annual-staff-wrap"><table class="annual-staff-table"><thead id="annualStaffHead"></thead><tbody id="annualStaffBody"></tbody><tfoot id="annualStaffFoot"></tfoot></table></div>
         </section>
       </section>
       </div>
