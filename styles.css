@@ -417,6 +417,8 @@ footer { padding: 14px 2px 0; display: flex; justify-content: space-between; gap
   .annual-toolbar > * { width: 100%; }
   .annual-staff-heading { display: block; }
   .annual-staff-heading .button { width: 100%; margin-top: 10px; }
+  .annual-month-section .section-heading { display: block; }
+  .annual-month-section .section-heading .section-status { display: block; margin-top: 8px; white-space: normal; }
   .phase-chart { padding-left: 6px; padding-right: 6px; }
   .phase-table-wrap { max-height: 560px; }
   .phase-table .phase-fixed-3, .phase-table .phase-fixed-4, .phase-table .phase-fixed-5,
