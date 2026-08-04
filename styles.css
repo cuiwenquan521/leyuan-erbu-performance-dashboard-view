@@ -271,6 +271,7 @@ tbody tr:hover { background: #f8fbfa; }
 .group-range-row > strong { align-self: center; min-width: 118px; color: #203543; font-size: 13px; }
 .group-range-row .compact-field input { width: 145px; }
 .group-range-separator { align-self: center; color: var(--muted); font-size: 12px; }
+.group-toolbar select { width: 145px; height: 36px; padding: 0 30px 0 10px; color: var(--text); background: #fff; border: 1px solid #c8d1d8; border-radius: 4px; }
 .group-config-wrap { max-height: 360px; border-bottom: 1px solid var(--border); }
 .group-config-table { min-width: 760px; table-layout: fixed; }
 .group-config-table th, .group-config-table td { padding: 9px 14px; border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); vertical-align: middle; }
@@ -418,6 +419,7 @@ footer { padding: 14px 2px 0; display: flex; justify-content: space-between; gap
   .group-toolbar > * { width: 100%; }
   .group-range-row > * { width: 100%; }
   .group-range-row .compact-field input { width: 100%; }
+  .group-toolbar select { width: 100%; }
   .group-range-separator { display: none; }
   .group-analysis-heading { display: block; }
   .group-analysis-heading .section-status { display: block; margin-top: 8px; }

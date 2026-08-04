@@ -36,6 +36,7 @@ const elements = {
   staffComparison: document.querySelector("#staffComparison"),
   staffAnalysisPeriod: document.querySelector("#staffAnalysisPeriod"),
   groupMonth: document.querySelector("#groupMonth"),
+  groupPrefixFilter: document.querySelector("#groupPrefixFilter"),
   groupStartMonth: document.querySelector("#groupStartMonth"),
   groupEndMonth: document.querySelector("#groupEndMonth"),
   applyGroupRange: document.querySelector("#applyGroupRange"),
@@ -663,6 +664,12 @@ function groupOrderNet(order) {
   return amount(order.sellerReceivable) - amount(order.refundAmount);
 }
 
+function matchesGroupPrefix(groupNumber, prefix) {
+  if (!prefix) return true;
+  if (prefix === "其他") return !/^[A-Z]/.test(groupNumber);
+  return groupNumber.startsWith(prefix);
+}
+
 function groupMonthSequence(startMonth, endMonth) {
   const startParts = String(startMonth).split("-").map(Number);
   const endParts = String(endMonth).split("-").map(Number);
@@ -705,10 +712,10 @@ function groupPeriodLabel(snapshot = groupOrderSnapshot) {
   return start === end ? display(start) : `${display(start)} - ${display(end)}`;
 }
 
-function buildGroupReport() {
+function buildGroupReport(prefix = "") {
   const orders = Array.isArray(groupOrderSnapshot.orders) ? groupOrderSnapshot.orders : [];
   const assignments = Array.isArray(groupAssignments.assignments) ? groupAssignments.assignments : [];
-  const configured = assignments.filter(item => item.groupNumber && item.employeeName && item.startAt);
+  const configured = assignments.filter(item => item.groupNumber && item.employeeName && item.startAt && matchesGroupPrefix(item.groupNumber, prefix));
   const groups = configured.map(assignment => ({
     ...assignment,
     orders: new Set(),
@@ -769,10 +776,17 @@ function renderGroupAnalysis() {
   const orders = Array.isArray(groupOrderSnapshot.orders) ? groupOrderSnapshot.orders : [];
   const saved = new Map((groupAssignments.assignments || []).map(item => [item.groupNumber, item]));
   const discovered = [...new Set(orders.map(order => order.groupNumber).filter(Boolean))];
-  const groupNumbers = [...new Set([...saved.keys(), ...discovered])].sort((a, b) => a.localeCompare(b, "zh-CN"));
+  const allGroupNumbers = [...new Set([...saved.keys(), ...discovered])].sort((a, b) => a.localeCompare(b, "zh-CN"));
+  const prefixes = [...new Set(allGroupNumbers.map(groupNumber => groupNumber.match(/^[A-Z]/)?.[0] || "其他"))].sort((a, b) => a.localeCompare(b, "zh-CN"));
+  const previousPrefix = elements.groupPrefixFilter.value;
+  elements.groupPrefixFilter.innerHTML = '<option value="">全部群号</option>' + prefixes.map(prefix => `<option value="${escapeHtml(prefix)}">${escapeHtml(prefix)} 开头</option>`).join("");
+  elements.groupPrefixFilter.value = prefixes.includes(previousPrefix) ? previousPrefix : "";
+  const selectedPrefix = elements.groupPrefixFilter.value;
+  const groupNumbers = allGroupNumbers.filter(groupNumber => matchesGroupPrefix(groupNumber, selectedPrefix));
+  const visibleOrders = orders.filter(order => matchesGroupPrefix(order.groupNumber, selectedPrefix));
   const latestEmployee = new Map();
   [...orders].sort((a, b) => normalizeTime(a.orderTime).localeCompare(normalizeTime(b.orderTime))).forEach(order => latestEmployee.set(order.groupNumber, order.employeeName));
-  const staffNames = [...new Set([...(monthlyReport?.staff || []).map(person => person.name), ...orders.map(order => order.employeeName)])].filter(Boolean).sort((a, b) => a.localeCompare(b, "zh-CN"));
+  const staffNames = [...new Set([...(monthlyReport?.staff || []).map(person => person.name), ...STAFF_ROSTER.map(person => person.name)])].filter(Boolean).sort((a, b) => a.localeCompare(b, "zh-CN"));
   elements.groupStaffNames.innerHTML = staffNames.map(name => `<option value="${escapeHtml(name)}"></option>`).join("");
   const editable = groupAssignmentsEditable();
   const rangeLabel = groupRangeActive ? "区间" : "该月";
@@ -782,17 +796,18 @@ function renderGroupAnalysis() {
     const setting = saved.get(groupNumber) || { groupNumber, employeeName: latestEmployee.get(groupNumber) || "", startAt: "" };
     const groupOrders = orders.filter(order => order.groupNumber === groupNumber && (!setting.startAt || normalizeTime(order.orderTime) >= normalizeTime(setting.startAt)));
     const value = groupOrders.reduce((sum, order) => sum + groupOrderNet(order), 0);
-    return `<tr data-group-assignment="${escapeHtml(groupNumber)}"><td>${editable ? `<input class="group-input" data-group-employee value="${escapeHtml(setting.employeeName)}" list="groupStaffNames" placeholder="员工姓名" />` : `<strong>${escapeHtml(setting.employeeName || "未填写")}</strong>`}</td><td><strong class="group-number">${escapeHtml(groupNumber)}</strong></td><td>${editable ? `<input class="group-input group-time-input" data-group-start type="datetime-local" value="${escapeHtml(String(setting.startAt || "").replace(" ", "T").slice(0, 16))}" />` : escapeHtml(setting.startAt || "未填写")}</td><td class="number">${setting.startAt ? new Set(groupOrders.map(order => order.orderKey)).size : "-"}</td><td class="number net-amount">${setting.startAt ? currency(value) : "-"}</td></tr>`;
+    const choices = [...new Set([...staffNames, setting.employeeName].filter(Boolean))].map(name => `<option value="${escapeHtml(name)}"${name === setting.employeeName ? " selected" : ""}>${escapeHtml(name)}${!staffNames.includes(name) ? "（历史人员）" : ""}</option>`).join("");
+    return `<tr data-group-assignment="${escapeHtml(groupNumber)}"><td>${editable ? `<select class="group-input" data-group-employee aria-label="${escapeHtml(groupNumber)} 维护员工"><option value="">未分配</option>${choices}</select>` : `<strong>${escapeHtml(setting.employeeName || "未填写")}</strong>`}</td><td><strong class="group-number">${escapeHtml(groupNumber)}</strong></td><td>${editable ? `<input class="group-input group-time-input" data-group-start type="datetime-local" value="${escapeHtml(String(setting.startAt || "").replace(" ", "T").slice(0, 16))}" />` : escapeHtml(setting.startAt || "未填写")}</td><td class="number">${setting.startAt ? new Set(groupOrders.map(order => order.orderKey)).size : "-"}</td><td class="number net-amount">${setting.startAt ? currency(value) : "-"}</td></tr>`;
   }).join("") || '<tr><td colspan="5"><div class="empty-state"><strong>该月尚未发现客户微信群号</strong><span>管理员可点击“同步订单管理”读取最新数据。</span></div></td></tr>';
 
-  const report = buildGroupReport();
+  const report = buildGroupReport(selectedPrefix);
   elements.configuredGroupCount.textContent = report.groups.length;
   elements.groupTotalValue.textContent = currency(report.total);
   elements.groupAverageValue.textContent = currency(report.average);
   elements.groupAverageOrders.textContent = plainNumber(report.averageOrders, 1);
   const missingText = groupOrderSnapshot.missingMonths?.length ? ` · ${groupOrderSnapshot.missingMonths.length} 个月尚未同步` : "";
   elements.groupDataState.textContent = groupOrderSnapshot.updatedAt
-    ? `${groupPeriodLabel()} · ${formatDateTime(groupOrderSnapshot.updatedAt)} · ${orders.length} 个有群号订单${missingText}`
+    ? `${selectedPrefix ? `${selectedPrefix} 开头 · ` : ""}${groupPeriodLabel()} · ${formatDateTime(groupOrderSnapshot.updatedAt)} · ${visibleOrders.length} 个有群号订单${missingText}`
     : `尚未同步${groupRangeActive ? "所选区间" : "该月"}订单管理数据`;
   if (!report.groups.length) {
     elements.groupComparison.innerHTML = '<div class="empty-state group-empty"><strong>请先填写员工姓名和接群时间</strong><span>保存后才会把该群在接群时间之后的订单纳入对比。</span></div>';
@@ -918,11 +933,14 @@ async function applyGroupJoinRange() {
 }
 
 async function saveGroupAssignmentSettings() {
-  const assignments = [...document.querySelectorAll("[data-group-assignment]")].map(row => ({
+  const updates = [...document.querySelectorAll("[data-group-assignment]")].map(row => ({
     groupNumber: row.dataset.groupAssignment,
     employeeName: row.querySelector("[data-group-employee]")?.value.trim() || "",
     startAt: row.querySelector("[data-group-start]")?.value || "",
   }));
+  const merged = new Map((groupAssignments.assignments || []).map(item => [item.groupNumber, item]));
+  updates.forEach(item => merged.set(item.groupNumber, item));
+  const assignments = [...merged.values()];
   elements.saveGroupAssignments.disabled = true;
   try {
     groupAssignments = await fetchJson("/api/group-assignments", { method: "POST", body: JSON.stringify({ assignments }) });
@@ -1416,6 +1434,7 @@ elements.groupMonth.addEventListener("change", () => {
   groupRangeActive = false;
   loadGroupAnalysis();
 });
+elements.groupPrefixFilter.addEventListener("change", renderGroupAnalysis);
 elements.applyGroupRange.addEventListener("click", applyGroupRange);
 elements.useGroupJoinMonth.addEventListener("click", applyGroupJoinRange);
 elements.syncGroupRange.addEventListener("click", syncGroupRangeData);
