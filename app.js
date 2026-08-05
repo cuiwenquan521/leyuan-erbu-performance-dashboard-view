@@ -1062,7 +1062,10 @@ function renderGroupAnalysis() {
     return;
   }
   const topValue = Math.max(...report.groups.map(group => group.value));
-  const headers = report.productNames.map(name => `<th class="group-product-head" title="${escapeHtml(name)}"><span>${escapeHtml(name)}</span></th>`).join("");
+  const headers = report.productNames.map(name => {
+    const category = PRODUCT_CATEGORIES.find(item => item.label === name);
+    return `<th class="group-product-head"><span>${escapeHtml(name)}</span><span class="matrix-info" title="合并包含：${escapeHtml(category?.hint || name)}" aria-label="${escapeHtml(name)}匹配规则">!</span></th>`;
+  }).join("");
   const rows = report.groups.map(group => {
     const totalClass = group.value === topValue && topValue > 0 ? " group-leader" : group.value < report.average ? " group-below" : "";
     const cells = report.productNames.map(name => {
