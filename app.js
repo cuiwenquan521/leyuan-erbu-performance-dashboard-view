@@ -233,7 +233,9 @@ function escapeHtml(value) {
 }
 
 function currency(value) {
-  return new Intl.NumberFormat("zh-CN", { style: "currency", currency: "CNY", minimumFractionDigits: 2 }).format(value || 0);
+  const numeric = amount(value);
+  const rounded = Math.round((numeric + Math.sign(numeric || 1) * 1e-9) * 100) / 100;
+  return new Intl.NumberFormat("zh-CN", { style: "currency", currency: "CNY", minimumFractionDigits: 2 }).format(rounded);
 }
 
 function percent(value) { return `${(Number.isFinite(value) ? value * 100 : 0).toFixed(1)}%`; }
