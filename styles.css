@@ -246,6 +246,11 @@ tbody tr:hover { background: #f8fbfa; }
 .phase-table .phase-date-head { width: 148px; min-width: 148px; color: #4e4040; }
 .phase-table .phase-value-head, .phase-table .phase-daily-value { width: 88px; min-width: 88px; }
 .phase-table .phase-order-head, .phase-table .phase-daily-order { width: 60px; min-width: 60px; }
+.phase-table tbody .phase-daily-value, .phase-table tbody .phase-daily-order { font-size: 14px; font-weight: 700; }
+.phase-table tbody td.phase-rank-top { background: #f7c2c2 !important; color: #9c1c24; font-size: 15px; font-weight: 900; }
+.phase-table tbody td.phase-rank-bottom { background: #fff0b8 !important; color: #6f5200; font-size: 15px; font-weight: 900; }
+.phase-table tbody td.phase-rank-top .performance-breakdown-trigger,
+.phase-table tbody td.phase-rank-bottom .performance-breakdown-trigger { font-size: inherit; font-weight: inherit; }
 .phase-fixed { position: sticky; z-index: 2; box-shadow: 1px 0 0 #d6e0e4; }
 .phase-table thead .phase-fixed { z-index: 7; }
 .phase-table tfoot .phase-fixed { z-index: 6; }

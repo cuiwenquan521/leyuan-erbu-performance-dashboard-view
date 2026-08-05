@@ -1448,6 +1448,16 @@ function renderPhaseReport() {
   renderPhaseChart();
 
   const reportsByDate = new Map(archiveReports.map(item => [item.archive.date, item.report]));
+  const dailyRankByDate = new Map(days.map(day => {
+    const dayReport = reportsByDate.get(day.date);
+    if (!dayReport) return [day.date, new Map()];
+    const values = new Map((dayReport.staff || []).map(person => [person.name, person.net]));
+    const ranked = combined.staff.map(person => ({ name: person.name, value: amount(values.get(person.name)) }))
+      .sort((left, right) => right.value - left.value || left.name.localeCompare(right.name, "zh-CN"));
+    const top = new Set(ranked.slice(0, 2).map(item => item.name));
+    const bottom = new Set(ranked.slice(-2).map(item => item.name));
+    return [day.date, new Map(ranked.map(item => [item.name, top.has(item.name) ? "phase-rank-top" : bottom.has(item.name) ? "phase-rank-bottom" : ""]))];
+  }));
   const firstHeaders = ["部门", "姓名", "目标", "日均目标", "已完成", "剩余", "完成率", "单量", "单价"];
   elements.phaseTableHead.innerHTML = `<tr>${firstHeaders.map((label, index) => fixedCell(label, index + 1, "th", "phase-left-head", 'rowspan="2"')).join("")}${days.map(day => `<th colspan="2" class="phase-date-head">${Number(month.slice(5))}.${day.day}/周${day.weekday}</th>`).join("")}</tr><tr>${days.map(() => '<th class="number phase-value-head">业绩</th><th class="number phase-order-head">单量</th>').join("")}</tr>`;
 
@@ -1471,7 +1481,9 @@ function renderPhaseReport() {
     const daily = days.map(day => {
       const dayPerson = reportsByDate.get(day.date)?.staff.find(item => item.name === person.name);
       const dayReport = reportsByDate.get(day.date);
-      return dayPerson ? `<td class="number phase-daily-value">${performanceBreakdown(dayPerson.net, dayReport.orders.filter(order => order.waiterName === person.name), dayPerson.orders, `${person.name} · ${day.date} 净业绩`)}</td><td class="number phase-daily-order">${dayPerson.orderCount}</td>` : '<td class="number phase-daily-value">0</td><td class="number phase-daily-order">0</td>';
+      const rankClass = dailyRankByDate.get(day.date)?.get(person.name) || "";
+      const rankLabel = rankClass === "phase-rank-top" ? "当日前两名" : rankClass === "phase-rank-bottom" ? "当日后两名" : "";
+      return dayPerson ? `<td class="number phase-daily-value ${rankClass}" title="${rankLabel}">${performanceBreakdown(dayPerson.net, dayReport.orders.filter(order => order.waiterName === person.name), dayPerson.orders, `${person.name} · ${day.date} 净业绩`)}</td><td class="number phase-daily-order ${rankClass}" title="${rankLabel}">${dayPerson.orderCount}</td>` : '<td class="number phase-daily-value">0</td><td class="number phase-daily-order">0</td>';
     }).join("");
     return `<tr>${fixed}${daily}</tr>`;
   }).join("");
