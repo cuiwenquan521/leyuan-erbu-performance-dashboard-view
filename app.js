@@ -1615,6 +1615,11 @@ async function handleStartupAction() {
     return;
   }
 
+  if (shouldSync && params.get("date")) {
+    const requestedDate = normalizeReportingDate(params.get("date"));
+    elements.date.value = requestedDate;
+    localStorage.setItem(DATE_KEY, requestedDate);
+  }
   const archive = await refreshErp();
   if (!isBridge) return;
   if (!archive) {
