@@ -3,6 +3,20 @@ const GROUP_RANGE_KEY = "order-performance-dashboard-group-range-v1";
 const STAFF_ROSTER = [
   { department: "乐源二部", name: "储玉岳" },
 ];
+const PRODUCT_CATEGORIES = [
+  { label: "洗护", pattern: /婴幼儿桃叶精华|幼然婴幼儿舒润|婴幼儿保湿霜/, hint: "婴幼儿桃叶精华、幼然婴幼儿舒润、婴幼儿保湿霜" },
+  { label: "营养包", pattern: /多种维生素矿物质|妈妈钙/, hint: "多种维生素矿物质、妈妈钙" },
+  { label: "益生菌", pattern: /益生菌/, hint: "产品名包含“益生菌”" },
+  { label: "乳糖酶", pattern: /乳糖酶/, hint: "产品名包含“乳糖酶”" },
+  { label: "DHA", pattern: /DHA/i, hint: "产品名包含“DHA”" },
+  { label: "海藻钙", pattern: /海藻钙/, hint: "产品名包含“海藻钙”" },
+  { label: "乳铁蛋白", pattern: /乳铁蛋白/, hint: "产品名包含“乳铁蛋白”" },
+  { label: "接骨木莓", pattern: /接骨木莓/, hint: "产品名包含“接骨木莓”" },
+  { label: "气血饮大盒", pattern: /高良姜血红蛋白|高良姜礼盒/, hint: "高良姜血红蛋白、高良姜礼盒" },
+  { label: "减脂饮", pattern: /柑橘饮/, hint: "产品名包含“柑橘饮”" },
+  { label: "胶原蛋白", pattern: /胶原蛋白/, hint: "产品名包含“胶原蛋白”" },
+  { label: "鲐鱼精", pattern: /鲐鱼精/, hint: "产品名包含“鲐鱼精”" },
+];
 
 const elements = {
   date: document.querySelector("#reportDate"),
