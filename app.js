@@ -455,20 +455,33 @@ function render() {
       ["胶原蛋白", /胶原蛋白/],
       ["鲐鱼精", /鲐鱼精/],
     ];
+    const categoryHints = new Map([
+      ["洗护", "婴幼儿桃叶精华、幼然婴幼儿舒润、婴幼儿保湿霜"],
+      ["营养包", "多种维生素矿物质、妈妈钙"],
+      ["益生菌", "产品名包含“益生菌”"],
+      ["乳糖酶", "产品名包含“乳糖酶”"],
+      ["DHA", "产品名包含“DHA”"],
+      ["海藻钙", "产品名包含“海藻钙”"],
+      ["乳铁蛋白", "产品名包含“乳铁蛋白”"],
+      ["接骨木莓", "产品名包含“接骨木莓”"],
+      ["气血饮大盒", "高良姜血红蛋白、高良姜礼盒"],
+      ["减脂饮", "产品名包含“柑橘饮”"],
+      ["胶原蛋白", "产品名包含“胶原蛋白”"],
+      ["鲐鱼精", "产品名包含“鲐鱼精”"],
+    ]);
     const categoryCounts = new Map(analysisReport.staff.map(person => {
       const personOrders = analysisReport.orders.filter(order => order.waiterName === person.name && order.countAsOrder);
-      const groupNumbers = [...new Set(personOrders.map(order => order.groupNumber).filter(Boolean))];
       const counts = categoryColumns.map(([label, pattern]) => {
         const orderNumbers = new Set(personOrders.filter(order => (order.products || []).some(product => pattern.test(String(product.name || "")))).map(order => order.orderNumber));
         return [label, orderNumbers.size];
       });
-      return [person.name, { groupNumbers, counts: new Map(counts) }];
+      return [person.name, { counts: new Map(counts) }];
     }));
     const categoryStats = new Map(categoryColumns.map(([label]) => {
       const values = analysisReport.staff.map(person => categoryCounts.get(person.name).counts.get(label) || 0);
       return [label, { average: values.reduce((sum, value) => sum + value, 0) / values.length, maximum: Math.max(...values) }];
     }));
-    const headers = categoryColumns.map(([label]) => `<th class="matrix-product-head" title="按订单号去重：${escapeHtml(label)}"><span>${escapeHtml(label)}</span></th>`).join("");
+    const headers = categoryColumns.map(([label]) => `<th class="matrix-product-head"><span>${escapeHtml(label)}</span><span class="matrix-info" title="按订单号去重；包含：${escapeHtml(categoryHints.get(label) || label)}" aria-label="${escapeHtml(label)}匹配规则">!</span></th>`).join("");
     const rows = analysisReport.staff.map(person => {
       const detail = categoryCounts.get(person.name);
       const cells = categoryColumns.map(([label]) => {
@@ -477,11 +490,11 @@ function render() {
         const state = stats.maximum > 0 && quantity === stats.maximum ? " product-leader" : quantity < stats.average ? " product-below" : "";
         return `<td class="number matrix-product-value${state}" title="${escapeHtml(label)}：${quantity} 个订单；人员均值 ${plainNumber(stats.average, 1)} 个订单">${quantity}</td>`;
       }).join("");
-      return `<tr><td class="matrix-fixed matrix-group">${escapeHtml(detail.groupNumbers.join("、") || "未填写")}</td><td class="matrix-fixed matrix-name"><strong>${escapeHtml(person.name)}</strong></td><td class="matrix-fixed matrix-department">${escapeHtml(person.department)}</td><td class="number matrix-order-count">${person.orderCount}</td><td class="number matrix-total-performance net-amount">${currency(person.net)}</td>${cells}</tr>`;
+      return `<tr><td class="matrix-fixed matrix-name"><strong>${escapeHtml(person.name)}</strong></td><td class="matrix-fixed matrix-department">${escapeHtml(person.department)}</td><td class="number matrix-order-count">${person.orderCount}</td><td class="number matrix-total-performance net-amount">${currency(person.net)}</td>${cells}</tr>`;
     }).join("");
     const averages = categoryColumns.map(([label]) => `<td class="number matrix-average-value">${plainNumber(categoryStats.get(label).average, 1)}</td>`).join("");
-    const tableWidth = 620 + categoryColumns.length * 118;
-    elements.staffComparison.innerHTML = `<table class="staff-matrix-table staff-product-template-table" style="min-width:${tableWidth}px"><thead><tr><th class="matrix-fixed matrix-group">群号</th><th class="matrix-fixed matrix-name">姓名</th><th class="matrix-fixed matrix-department">部门</th><th class="number">新开数量</th><th class="number">群总业绩</th>${headers}</tr></thead><tbody>${rows}</tbody><tfoot><tr><td class="matrix-fixed matrix-group"></td><td class="matrix-fixed matrix-name"><strong>人员均值</strong></td><td class="matrix-fixed matrix-department"></td><td class="number">${plainNumber(analysisReport.staff.reduce((sum, person) => sum + person.orderCount, 0) / analysisReport.staff.length, 1)}</td><td class="number net-amount">${currency(analysisReport.staff.reduce((sum, person) => sum + person.net, 0) / analysisReport.staff.length)}</td>${averages}</tr></tfoot></table>`;
+    const tableWidth = 480 + categoryColumns.length * 118;
+    elements.staffComparison.innerHTML = `<table class="staff-matrix-table staff-product-template-table" style="min-width:${tableWidth}px"><thead><tr><th class="matrix-fixed matrix-name">姓名</th><th class="matrix-fixed matrix-department">部门</th><th class="number">新开数量</th><th class="number">群总业绩</th>${headers}</tr></thead><tbody>${rows}</tbody><tfoot><tr><td class="matrix-fixed matrix-name"><strong>人员均值</strong></td><td class="matrix-fixed matrix-department"></td><td class="number">${plainNumber(analysisReport.staff.reduce((sum, person) => sum + person.orderCount, 0) / analysisReport.staff.length, 1)}</td><td class="number net-amount">${currency(analysisReport.staff.reduce((sum, person) => sum + person.net, 0) / analysisReport.staff.length)}</td>${averages}</tr></tfoot></table>`;
   } else {
     elements.staffComparison.innerHTML = '<div class="empty-state"><div class="empty-icon">人</div><strong>暂无员工数据</strong></div>';
   }

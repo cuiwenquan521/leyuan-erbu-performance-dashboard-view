@@ -163,14 +163,16 @@ tbody tr:hover { background: #f8fbfa; }
 .staff-matrix-table thead th { position: sticky; top: 0; z-index: 3; height: 66px; background: #f4f7f8; border-top: 1px solid #b9cbd3; font-weight: 800; }
 .staff-matrix-table tr > :first-child { border-left: 1px solid #b9cbd3; }
 .staff-matrix-table .matrix-fixed { position: sticky; z-index: 2; text-align: left; }
-.staff-matrix-table .matrix-group { left: 0; width: 140px; min-width: 140px; }
-.staff-matrix-table .matrix-name { left: 140px; width: 120px; min-width: 120px; }
-.staff-matrix-table .matrix-department { left: 260px; width: 130px; min-width: 130px; }
+.staff-matrix-table .matrix-group { left: 0; width: 0; min-width: 0; }
+.staff-matrix-table .matrix-name { left: 0; width: 120px; min-width: 120px; }
+.staff-matrix-table .matrix-department { left: 120px; width: 130px; min-width: 130px; }
 .staff-matrix-table thead .matrix-fixed { z-index: 5; background: #f4f7f8; }
 .staff-matrix-table tbody .matrix-fixed { background: #fff; }
 .staff-matrix-table tfoot .matrix-fixed { background: #e6f0f3; }
 .matrix-product-head { width: 132px; font-size: 14px; }
 .matrix-product-head span { display: -webkit-box; overflow: hidden; -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 1.4; font-weight: 800; }
+.matrix-product-head { position: relative; }
+.matrix-product-head .matrix-info { display: inline-grid; place-items: center; width: 16px; height: 16px; margin-left: 4px; border: 1px solid #668797; border-radius: 50%; color: #456d7e; font: 700 11px/1 Arial, sans-serif; cursor: help; vertical-align: middle; }
 .staff-matrix-table tbody .matrix-department, .staff-matrix-table tbody .matrix-name, .staff-matrix-table tbody .matrix-group { font-size: 14px; font-weight: 700; }
 .staff-matrix-table thead .matrix-department, .staff-matrix-table thead .matrix-name, .staff-matrix-table thead .matrix-group { font-size: 14px; font-weight: 800; }
 .matrix-product-value { font-weight: 600; }
