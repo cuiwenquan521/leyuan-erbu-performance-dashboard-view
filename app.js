@@ -778,6 +778,7 @@ function buildGroupReport(prefix = "") {
     value: 0,
     monthValue: 0,
     products: new Map(),
+    monthProducts: new Map(),
   }));
   const byNumber = new Map(groups.map(group => [group.groupNumber, group]));
   orders.forEach(order => {
@@ -786,7 +787,8 @@ function buildGroupReport(prefix = "") {
     const net = groupOrderNet(order);
     group.orders.add(order.orderKey);
     group.value += net;
-    if (String(order.orderTime || "").slice(0, 7) === elements.groupMonth.value) {
+    const isCurrentMonth = String(order.orderTime || "").slice(0, 7) === elements.groupMonth.value;
+    if (isCurrentMonth) {
       group.monthOrders.add(order.orderKey);
       group.monthValue += net;
     }
@@ -800,6 +802,12 @@ function buildGroupReport(prefix = "") {
       item.quantity += Math.max(0, amount(product.quantity));
       item.value += allocated;
       group.products.set(product.name, item);
+      if (isCurrentMonth) {
+        const monthItem = group.monthProducts.get(product.name) || { name: product.name, quantity: 0, value: 0 };
+        monthItem.quantity += Math.max(0, amount(product.quantity));
+        monthItem.value += allocated;
+        group.monthProducts.set(product.name, monthItem);
+      }
     });
   });
   const total = groups.reduce((sum, group) => sum + group.value, 0);
@@ -872,6 +880,7 @@ function buildEmployeeGroupInsights(report) {
       value: 0,
       monthValue: 0,
       products: new Map(),
+      monthProducts: new Map(),
     };
     employee.groups += 1;
     group.orders.forEach(orderKey => employee.orders.add(orderKey));
@@ -883,11 +892,19 @@ function buildEmployeeGroupInsights(report) {
       item.value += product.value;
       employee.products.set(product.name, item);
     });
+    group.monthProducts.forEach(product => {
+      const item = employee.monthProducts.get(product.name) || { name: product.name, quantity: 0, value: 0 };
+      item.quantity += product.quantity;
+      item.value += product.value;
+      employee.monthProducts.set(product.name, item);
+    });
     employees.set(group.employeeName, employee);
   });
   const rows = [...employees.values()];
   const average = rows.length ? rows.reduce((sum, employee) => sum + employee.value, 0) / rows.length : 0;
+  const monthAverage = rows.length ? rows.reduce((sum, employee) => sum + employee.monthValue, 0) / rows.length : 0;
   const leader = rows.reduce((best, employee) => !best || employee.value > best.value ? employee : best, null);
+  const monthLeader = rows.reduce((best, employee) => !best || employee.monthValue > best.monthValue ? employee : best, null);
   const productStats = new Map(report.productNames.map(name => {
     const quantities = rows.map(employee => employee.products.get(name)?.quantity || 0);
     const totalValue = rows.reduce((sum, employee) => sum + (employee.products.get(name)?.value || 0), 0);
@@ -899,24 +916,41 @@ function buildEmployeeGroupInsights(report) {
       totalValue,
     }];
   }));
+  const monthProductStats = new Map(report.productNames.map(name => {
+    const quantities = rows.map(employee => employee.monthProducts.get(name)?.quantity || 0);
+    const totalValue = rows.reduce((sum, employee) => sum + (employee.monthProducts.get(name)?.value || 0), 0);
+    const totalQuantity = quantities.reduce((sum, quantity) => sum + quantity, 0);
+    return [name, {
+      averageQuantity: rows.length ? totalQuantity / rows.length : 0,
+      maximumQuantity: Math.max(0, ...quantities),
+      unitValue: totalQuantity > 0 ? totalValue / totalQuantity : 0,
+      totalValue,
+    }];
+  }));
   rows.forEach(employee => {
     const candidates = report.productNames.map(name => {
-      const stats = productStats.get(name);
-      const current = employee.products.get(name)?.quantity || 0;
+      const monthlyStats = monthProductStats.get(name);
+      const stats = monthlyStats.totalValue > 0 ? monthlyStats : productStats.get(name);
+      const source = monthlyStats.totalValue > 0 ? employee.monthProducts : employee.products;
+      const current = source.get(name)?.quantity || 0;
       const quantityGap = Math.max(0, stats.averageQuantity - current);
       const score = stats.totalValue * (1 + quantityGap / Math.max(1, stats.averageQuantity));
       return { name, current, quantityGap, ...stats, score };
     }).filter(item => item.unitValue > 0).sort((left, right) => right.score - left.score);
     const priority = candidates.find(item => item.quantityGap > 0) || candidates[0] || null;
     const gapToAverage = Math.max(0, average - employee.value);
+    const monthGapToAverage = Math.max(0, monthAverage - employee.monthValue);
     const gapToLeader = leader && leader.name !== employee.name ? Math.max(0, leader.value - employee.value + 0.01) : 0;
+    const monthGapToLeader = monthLeader && monthLeader.name !== employee.name ? Math.max(0, monthLeader.monthValue - employee.monthValue + 0.01) : 0;
     employee.gapToAverage = gapToAverage;
+    employee.monthGapToAverage = monthGapToAverage;
     employee.gapToLeader = gapToLeader;
+    employee.monthGapToLeader = monthGapToLeader;
     employee.priority = priority;
     employee.unitsToAverage = priority && gapToAverage > 0 ? Math.ceil(gapToAverage / priority.unitValue) : 0;
     employee.unitsToLeader = priority && gapToLeader > 0 ? Math.ceil(gapToLeader / priority.unitValue) : 0;
   });
-  return { rows: rows.sort((left, right) => right.value - left.value), average, leader, productStats };
+  return { rows: rows.sort((left, right) => right.value - left.value), average, monthAverage, leader, monthLeader, productStats, monthProductStats };
 }
 
 function renderGroupEmployeeAiAnalysis(report) {
@@ -933,19 +967,19 @@ function renderGroupEmployeeAiAnalysis(report) {
     const targetText = !priority
       ? "当前区间缺少产品明细"
       : employee.gapToAverage > 0
-        ? `优先追 ${productGap || employee.unitsToAverage} 件可补齐该单品均值；按当前净单价测算，约 ${employee.unitsToAverage} 件可使员工群产值达到均值`
+        ? `本月优先追 ${productGap || employee.unitsToAverage} 件可补齐该单品均值；按当前净单价测算约 ${employee.unitsToAverage} 件可达累计均值`
         : employee.gapToLeader > 0
-          ? `已达到员工均值；按当前净单价测算，约 ${employee.unitsToLeader} 件可超过当前第一名`
+          ? `本月已达到员工均值；按当前净单价测算约 ${employee.unitsToLeader} 件可超过累计第一名`
           : "当前排名第一，建议保持主力单品节奏，并复制成交方法到第二增长单品";
-    const performance = employee.gapToAverage > 0
-      ? `低于员工均值 ${currency(employee.gapToAverage)}`
+    const performance = employee.monthGapToAverage > 0
+      ? `本月低于均值 ${currency(employee.monthGapToAverage)}；累计${employee.gapToAverage > 0 ? `低于均值 ${currency(employee.gapToAverage)}` : "已达到均值"}`
       : employee.gapToLeader > 0
         ? `高于均值，距第一名 ${currency(employee.gapToLeader)}`
         : "当前员工群产值第一";
     const direction = priority ? groupProductSalesDirection(priority.name) : "先补齐产品明细，再依据客户需求制定跟进方向。";
-    return `<tr><td><strong>${escapeHtml(employee.name)}</strong></td><td class="number">${employee.groups}</td><td class="number">${employee.orders.size}</td><td class="number net-amount">${currency(employee.value)}</td><td class="group-ai-performance${employee.gapToAverage > 0 ? " group-ai-warning" : employee.gapToLeader === 0 ? " group-ai-leading" : ""}">${escapeHtml(performance)}</td><td><strong>${escapeHtml(productName)}</strong>${priority ? `<span>当前 ${plainNumber(priority.current)} 件 · 员工均值 ${plainNumber(priority.averageQuantity, 1)} 件 · 第一名 ${plainNumber(priority.maximumQuantity)} 件</span>` : ""}</td><td>${escapeHtml(targetText)}</td><td>${escapeHtml(direction)}</td></tr>`;
+    return `<tr><td><strong>${escapeHtml(employee.name)}</strong></td><td class="number">${employee.groups}</td><td class="number">${employee.orders.size}</td><td class="number net-amount">${currency(employee.monthValue)}</td><td class="number net-amount">${currency(employee.value)}</td><td class="group-ai-performance${employee.monthGapToAverage > 0 ? " group-ai-warning" : employee.gapToLeader === 0 ? " group-ai-leading" : ""}">${escapeHtml(performance)}</td><td><strong>${escapeHtml(productName)}</strong>${priority ? `<span>当前 ${plainNumber(priority.current)} 件 · 单月均值 ${plainNumber(priority.averageQuantity, 1)} 件 · 最高 ${plainNumber(priority.maximumQuantity)} 件</span>` : ""}</td><td>${escapeHtml(targetText)}</td><td>${escapeHtml(direction)}</td></tr>`;
   }).join("");
-  elements.groupEmployeeAiAnalysis.innerHTML = `<div class="group-ai-heading"><div><h3>员工 AI 业绩分析与跟进建议</h3><p>依据当前筛选区间的 ERP 群订单、净业绩和产品件数自动测算；件数目标按该单品当前区间平均净单价估算。</p></div><span>员工均值 ${currency(insights.average)} · 第一名 ${escapeHtml(insights.leader?.name || "-")} ${currency(insights.leader?.value || 0)}</span></div><div class="table-wrap group-ai-table-wrap"><table class="group-ai-table"><thead><tr><th>员工</th><th class="number">群数</th><th class="number">订单</th><th class="number">累计群产值</th><th>业绩判断</th><th>优先追赶单品</th><th>追赶目标</th><th>针对性销售建议</th></tr></thead><tbody>${rows}</tbody></table></div><p class="group-ai-disclaimer">品牌建议原则：优先使用乐米倍优官方产品资料、标签、资质信息和已授权真实评价；不得编造好评，不作疾病治疗、预防或夸大功效承诺。</p>`;
+  elements.groupEmployeeAiAnalysis.innerHTML = `<div class="group-ai-heading"><div><h3>员工 AI 业绩分析与跟进建议</h3><p>本月按 ${escapeHtml(elements.groupMonth.value)} 计算单月均值；累计按各群接群时间之后的ERP数据计算。推荐单品优先参考本月高产值且员工低于均值的产品。</p></div><span>本月均值 ${currency(insights.monthAverage)} · 累计均值 ${currency(insights.average)} · 累计第一名 ${escapeHtml(insights.leader?.name || "-")} ${currency(insights.leader?.value || 0)}</span></div><div class="table-wrap group-ai-table-wrap"><table class="group-ai-table"><thead><tr><th>员工</th><th class="number">群数</th><th class="number">订单</th><th class="number">本月群产值</th><th class="number">累计群产值</th><th>单月/累计业绩判断</th><th>优先追赶单品</th><th>详细追赶目标</th><th>针对性销售建议</th></tr></thead><tbody>${rows}</tbody></table></div><p class="group-ai-disclaimer">品牌建议原则：优先使用乐米倍优官方产品资料、标签、资质信息和已授权真实评价；不得编造好评，不作疾病治疗、预防或夸大功效承诺。</p>`;
 }
 
 function renderGroupAnalysis() {
