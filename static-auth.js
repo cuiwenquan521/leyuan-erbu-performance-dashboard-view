@@ -4,27 +4,27 @@
   const CLOUD_SESSION_KEY = "leyuan-cloud-session-v1";
   const LOCAL_DASHBOARD_ORIGIN = "http://127.0.0.1:8765";
 
-  function syncErpThroughBridge(date) {
-    return new Promise((resolve, reject) => {
-      const popup = window.open(`${LOCAL_DASHBOARD_ORIGIN}/?sync=1&bridge=1&date=${encodeURIComponent(date)}`, "leyuan-erp-sync-bridge", "width=760,height=560");
-      if (!popup) {
-        reject(new Error("浏览器阻止了实时刷新窗口，请允许此网站打开弹窗后重试"));
-        return;
-      }
-      const timeout = window.setTimeout(() => finish(new Error("ERP 实时刷新超时，请检查本机同步服务和 ERP 登录状态")), 180_000);
-      const finish = (error, result) => {
-        window.clearTimeout(timeout);
-        window.removeEventListener("message", onMessage);
-        if (error) reject(error);
-        else resolve(result);
-      };
-      const onMessage = event => {
-        if (event.origin !== LOCAL_DASHBOARD_ORIGIN || event.source !== popup) return;
-        if (event.data?.type === "leyuan-erp-sync-complete") finish(null, event.data);
-        if (event.data?.type === "leyuan-erp-sync-error") finish(new Error(event.data.message || "ERP 实时刷新失败"));
-      };
-      window.addEventListener("message", onMessage);
-    });
+  async function syncErpDirect(date) {
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 90_000);
+    try {
+      const response = await nativeFetch(`${LOCAL_DASHBOARD_ORIGIN}/api/sync`, {
+        method: "POST",
+        cache: "no-store",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date }),
+        signal: controller.signal,
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.message || `ERP 实时刷新失败（${response.status}）`);
+      return result;
+    } catch (error) {
+      if (error.name === "AbortError") throw new Error("ERP 实时刷新超时，请检查 ERP 登录状态");
+      if (error instanceof TypeError) throw new Error("无法连接本机同步服务，请确认办公电脑已启动同步服务");
+      throw error;
+    } finally {
+      window.clearTimeout(timeout);
+    }
   }
 
   function saveGroupAssignmentsThroughBridge(assignments) {
@@ -257,13 +257,16 @@
     button.addEventListener("click", async () => {
       button.disabled = true;
       button.classList.add("is-refreshing");
+      const defaultLabel = button.innerHTML;
       try {
         if (!realtimeRefresh) {
           await loadLatest(true);
           return;
         }
         const selectedDate = document.querySelector("#reportDate")?.value || new Date().toISOString().slice(0, 10);
-        await syncErpThroughBridge(selectedDate);
+        button.innerHTML = '<span class="refresh-icon" aria-hidden="true">↻</span> 正在读取 ERP';
+        await syncErpDirect(selectedDate);
+        button.innerHTML = '<span class="refresh-icon" aria-hidden="true">↻</span> 正在更新网页';
         const deadline = Date.now() + 120_000;
         while (Date.now() < deadline) {
           if (await loadLatest(false)) {
@@ -278,6 +281,7 @@
       } finally {
         button.disabled = false;
         button.classList.remove("is-refreshing");
+        button.innerHTML = defaultLabel;
       }
     });
     if (session.role === "admin") {
