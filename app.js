@@ -784,6 +784,18 @@ function groupPeriodLabel(snapshot = groupOrderSnapshot) {
   return start === end ? display(start) : `${display(start)} - ${display(end)}`;
 }
 
+function mergeProductsIntoCategories(products) {
+  const categories = new Map(PRODUCT_CATEGORIES.map(({ label }) => [label, { name: label, quantity: 0, value: 0 }]));
+  products.forEach(product => {
+    const category = PRODUCT_CATEGORIES.find(({ pattern }) => pattern.test(String(product.name || "")));
+    if (!category) return;
+    const item = categories.get(category.label);
+    item.quantity += Math.max(0, amount(product.quantity));
+    item.value += amount(product.value);
+  });
+  return new Map([...categories].filter(([, product]) => product.quantity > 0 || Math.abs(product.value) > .001));
+}
+
 function buildGroupReport(prefix = "") {
   const orders = Array.isArray(groupOrderSnapshot.orders) ? groupOrderSnapshot.orders : [];
   const assignments = Array.isArray(groupAssignments.assignments) ? groupAssignments.assignments : [];
@@ -832,15 +844,13 @@ function buildGroupReport(prefix = "") {
   const average = groups.length ? total / groups.length : 0;
   const averageOrders = groups.length ? groups.reduce((sum, group) => sum + group.orders.size, 0) / groups.length : 0;
   groups.forEach(group => {
+    group.products = mergeProductsIntoCategories(group.products);
+    group.monthProducts = mergeProductsIntoCategories(group.monthProducts);
     group.productQuantity = [...group.products.values()].reduce((sum, product) => sum + product.quantity, 0);
     group.productTypes = [...group.products.values()].filter(product => product.quantity > 0).length;
     group.developmentRate = group.memberCount > 0 ? group.orders.size / group.memberCount * 100 : null;
   });
-  const productNames = [...new Set(groups.flatMap(group => [...group.products.keys()]))].sort((left, right) => {
-    const leftQuantity = groups.reduce((sum, group) => sum + (group.products.get(left)?.quantity || 0), 0);
-    const rightQuantity = groups.reduce((sum, group) => sum + (group.products.get(right)?.quantity || 0), 0);
-    return rightQuantity - leftQuantity || left.localeCompare(right, "zh-CN");
-  });
+  const productNames = PRODUCT_CATEGORIES.map(({ label }) => label);
   groups.forEach(group => { group.productShare = productNames.length ? group.productTypes / productNames.length * 100 : 0; });
   const productStats = new Map(productNames.map(name => {
     const quantities = groups.map(group => group.products.get(name)?.quantity || 0);
