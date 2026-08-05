@@ -441,29 +441,47 @@ function render() {
   elements.teamOrderAverage.textContent = currency(analysisReport.orderNetAverage);
   elements.staffAnalysisPeriod.textContent = `${analysisMonth.replace("-", "年")}月完整月累计`;
   if (analysisReport.staff.length) {
-    const productColumns = [...analysisReport.products].sort((a, b) => b.quantity - a.quantity || a.name.localeCompare(b.name, "zh-CN"));
-    const staffCount = analysisReport.staff.length;
-    const productStats = new Map(productColumns.map(product => {
-      const quantities = analysisReport.staff.map(person => person.products.get(product.name)?.quantity || 0);
-      return [product.name, {
-        average: quantities.reduce((sum, value) => sum + value, 0) / staffCount,
-        maximum: Math.max(...quantities),
-      }];
+    const categoryColumns = [
+      ["洗护", /婴幼儿桃叶精华|幼然婴幼儿舒润|婴幼儿保湿霜/],
+      ["营养包", /多种维生素矿物质|妈妈钙/],
+      ["益生菌", /益生菌/],
+      ["乳糖酶", /乳糖酶/],
+      ["DHA", /DHA/i],
+      ["海藻钙", /海藻钙/],
+      ["乳铁蛋白", /乳铁蛋白/],
+      ["接骨木莓", /接骨木莓/],
+      ["气血饮大盒", /高良姜血红蛋白|高良姜礼盒/],
+      ["减脂饮", /柑橘饮/],
+      ["胶原蛋白", /胶原蛋白/],
+      ["鲐鱼精", /鲐鱼精/],
+    ];
+    const categoryCounts = new Map(analysisReport.staff.map(person => {
+      const personOrders = analysisReport.orders.filter(order => order.waiterName === person.name && order.countAsOrder);
+      const groupNumbers = [...new Set(personOrders.map(order => order.groupNumber).filter(Boolean))];
+      const counts = categoryColumns.map(([label, pattern]) => {
+        const orderNumbers = new Set(personOrders.filter(order => (order.products || []).some(product => pattern.test(String(product.name || "")))).map(order => order.orderNumber));
+        return [label, orderNumbers.size];
+      });
+      return [person.name, { groupNumbers, counts: new Map(counts) }];
     }));
-    const productHeaders = productColumns.map(product => `<th class="matrix-product-head" title="${escapeHtml(product.name)}"><span>${escapeHtml(product.name)}</span></th>`).join("");
+    const categoryStats = new Map(categoryColumns.map(([label]) => {
+      const values = analysisReport.staff.map(person => categoryCounts.get(person.name).counts.get(label) || 0);
+      return [label, { average: values.reduce((sum, value) => sum + value, 0) / values.length, maximum: Math.max(...values) }];
+    }));
+    const headers = categoryColumns.map(([label]) => `<th class="matrix-product-head" title="按订单号去重：${escapeHtml(label)}"><span>${escapeHtml(label)}</span></th>`).join("");
     const rows = analysisReport.staff.map(person => {
-      const productCells = productColumns.map(product => {
-        const quantity = person.products.get(product.name)?.quantity || 0;
-        const stats = productStats.get(product.name);
+      const detail = categoryCounts.get(person.name);
+      const cells = categoryColumns.map(([label]) => {
+        const quantity = detail.counts.get(label) || 0;
+        const stats = categoryStats.get(label);
         const state = stats.maximum > 0 && quantity === stats.maximum ? " product-leader" : quantity < stats.average ? " product-below" : "";
-        return `<td class="number matrix-product-value${state}" title="${escapeHtml(product.name)}：${quantity} 件；人员均值 ${plainNumber(stats.average, 1)} 件">${quantity}</td>`;
+        return `<td class="number matrix-product-value${state}" title="${escapeHtml(label)}：${quantity} 个订单；人员均值 ${plainNumber(stats.average, 1)} 个订单">${quantity}</td>`;
       }).join("");
-      const productDetails = [...person.products.entries()].sort((a, b) => b[1].net - a[1].net).map(([name, data]) => `<div class="staff-product-item"><strong>${escapeHtml(name)}</strong><span>${data.quantity} 件 · 产品净值 ${currency(data.net)}</span></div>`).join("") || '<div class="staff-product-item"><strong>暂无产品业绩</strong><span>当前完整月业绩为 0</span></div>';
-      return `<tr><td class="matrix-fixed matrix-department">${escapeHtml(person.department)}</td><td class="matrix-fixed matrix-name"><button class="matrix-person-button" type="button" data-staff-toggle="${escapeHtml(person.name)}" aria-expanded="false" title="打开${escapeHtml(person.name)}的产品业绩明细"><span class="matrix-toggle-icon" aria-hidden="true">＋</span><strong>${escapeHtml(person.name)}</strong></button></td>${productCells}</tr><tr class="staff-matrix-detail" data-staff-detail="${escapeHtml(person.name)}" hidden><td colspan="${productColumns.length + 2}"><div class="staff-product-list">${productDetails}</div></td></tr>`;
+      return `<tr><td class="matrix-fixed matrix-group">${escapeHtml(detail.groupNumbers.join("、") || "未填写")}</td><td class="matrix-fixed matrix-name"><strong>${escapeHtml(person.name)}</strong></td><td class="matrix-fixed matrix-department">${escapeHtml(person.department)}</td><td class="number matrix-order-count">${person.orderCount}</td><td class="number matrix-total-performance net-amount">${currency(person.net)}</td>${cells}</tr>`;
     }).join("");
-    const averages = productColumns.map(product => `<td class="number matrix-average-value">${plainNumber(productStats.get(product.name).average, 1)}</td>`).join("");
-    const tableWidth = 240 + productColumns.length * 132;
-    elements.staffComparison.innerHTML = `<table class="staff-matrix-table" style="min-width:${tableWidth}px"><thead><tr><th class="matrix-fixed matrix-department">部门</th><th class="matrix-fixed matrix-name">姓名</th>${productHeaders}</tr></thead><tbody>${rows}</tbody><tfoot><tr><td class="matrix-fixed matrix-department"></td><td class="matrix-fixed matrix-name"><strong>人员均值</strong></td>${averages}</tr></tfoot></table>`;
+    const averages = categoryColumns.map(([label]) => `<td class="number matrix-average-value">${plainNumber(categoryStats.get(label).average, 1)}</td>`).join("");
+    const tableWidth = 620 + categoryColumns.length * 118;
+    elements.staffComparison.innerHTML = `<table class="staff-matrix-table staff-product-template-table" style="min-width:${tableWidth}px"><thead><tr><th class="matrix-fixed matrix-group">群号</th><th class="matrix-fixed matrix-name">姓名</th><th class="matrix-fixed matrix-department">部门</th><th class="number">新开数量</th><th class="number">群总业绩</th>${headers}</tr></thead><tbody>${rows}</tbody><tfoot><tr><td class="matrix-fixed matrix-group"></td><td class="matrix-fixed matrix-name"><strong>人员均值</strong></td><td class="matrix-fixed matrix-department"></td><td class="number">${plainNumber(analysisReport.staff.reduce((sum, person) => sum + person.orderCount, 0) / analysisReport.staff.length, 1)}</td><td class="number net-amount">${currency(analysisReport.staff.reduce((sum, person) => sum + person.net, 0) / analysisReport.staff.length)}</td>${averages}</tr></tfoot></table>`;
   } else {
     elements.staffComparison.innerHTML = '<div class="empty-state"><div class="empty-icon">人</div><strong>暂无员工数据</strong></div>';
   }
@@ -769,7 +787,7 @@ function groupPeriodLabel(snapshot = groupOrderSnapshot) {
 function buildGroupReport(prefix = "") {
   const orders = Array.isArray(groupOrderSnapshot.orders) ? groupOrderSnapshot.orders : [];
   const assignments = Array.isArray(groupAssignments.assignments) ? groupAssignments.assignments : [];
-  const configured = assignments.filter(item => item.groupNumber && item.employeeName && item.startAt && matchesGroupPrefix(item.groupNumber, prefix));
+  const configured = assignments.filter(item => item.groupNumber && item.employeeName && matchesGroupPrefix(item.groupNumber, prefix));
   const groups = configured.map(assignment => ({
     ...assignment,
     memberCount: Math.max(0, Math.trunc(amount(assignment.memberCount))),
@@ -783,7 +801,7 @@ function buildGroupReport(prefix = "") {
   const byNumber = new Map(groups.map(group => [group.groupNumber, group]));
   orders.forEach(order => {
     const group = byNumber.get(order.groupNumber);
-    if (!group || normalizeTime(order.orderTime) < normalizeTime(group.startAt)) return;
+    if (!group) return;
     const net = groupOrderNet(order);
     group.orders.add(order.orderKey);
     group.value += net;
@@ -947,6 +965,8 @@ function buildEmployeeGroupInsights(report) {
     employee.gapToLeader = gapToLeader;
     employee.monthGapToLeader = monthGapToLeader;
     employee.priority = priority;
+    employee.monthUnitsToAverage = priority && monthGapToAverage > 0 ? Math.ceil(monthGapToAverage / priority.unitValue) : 0;
+    employee.monthUnitsToLeader = priority && monthGapToLeader > 0 ? Math.ceil(monthGapToLeader / priority.unitValue) : 0;
     employee.unitsToAverage = priority && gapToAverage > 0 ? Math.ceil(gapToAverage / priority.unitValue) : 0;
     employee.unitsToLeader = priority && gapToLeader > 0 ? Math.ceil(gapToLeader / priority.unitValue) : 0;
   });
@@ -966,10 +986,10 @@ function renderGroupEmployeeAiAnalysis(report) {
     const productGap = priority ? Math.max(0, Math.ceil(priority.averageQuantity - priority.current)) : 0;
     const targetText = !priority
       ? "当前区间缺少产品明细"
-      : employee.gapToAverage > 0
-        ? `本月优先追 ${productGap || employee.unitsToAverage} 件可补齐该单品均值；按当前净单价测算约 ${employee.unitsToAverage} 件可达累计均值`
-        : employee.gapToLeader > 0
-          ? `本月已达到员工均值；按当前净单价测算约 ${employee.unitsToLeader} 件可超过累计第一名`
+      : employee.monthGapToAverage > 0
+        ? `本月优先追 ${productGap || employee.monthUnitsToAverage} 件可补齐该单品均值；按当前净单价测算约 ${employee.monthUnitsToAverage} 件可达本月均值，累计约 ${employee.unitsToAverage || 0} 件可达年度均值`
+        : employee.monthGapToLeader > 0
+          ? `本月已达到员工均值；按当前净单价测算约 ${employee.monthUnitsToLeader} 件可超过本月第一名，累计距年度第一名仍需约 ${employee.unitsToLeader || 0} 件`
           : "当前排名第一，建议保持主力单品节奏，并复制成交方法到第二增长单品";
     const performance = employee.monthGapToAverage > 0
       ? `本月低于均值 ${currency(employee.monthGapToAverage)}；累计${employee.gapToAverage > 0 ? `低于均值 ${currency(employee.gapToAverage)}` : "已达到均值"}`
@@ -979,7 +999,7 @@ function renderGroupEmployeeAiAnalysis(report) {
     const direction = priority ? groupProductSalesDirection(priority.name) : "先补齐产品明细，再依据客户需求制定跟进方向。";
     return `<tr><td><strong>${escapeHtml(employee.name)}</strong></td><td class="number">${employee.groups}</td><td class="number">${employee.orders.size}</td><td class="number net-amount">${currency(employee.monthValue)}</td><td class="number net-amount">${currency(employee.value)}</td><td class="group-ai-performance${employee.monthGapToAverage > 0 ? " group-ai-warning" : employee.gapToLeader === 0 ? " group-ai-leading" : ""}">${escapeHtml(performance)}</td><td><strong>${escapeHtml(productName)}</strong>${priority ? `<span>当前 ${plainNumber(priority.current)} 件 · 单月均值 ${plainNumber(priority.averageQuantity, 1)} 件 · 最高 ${plainNumber(priority.maximumQuantity)} 件</span>` : ""}</td><td>${escapeHtml(targetText)}</td><td>${escapeHtml(direction)}</td></tr>`;
   }).join("");
-  elements.groupEmployeeAiAnalysis.innerHTML = `<div class="group-ai-heading"><div><h3>员工 AI 业绩分析与跟进建议</h3><p>本月按 ${escapeHtml(elements.groupMonth.value)} 计算单月均值；累计按各群接群时间之后的ERP数据计算。推荐单品优先参考本月高产值且员工低于均值的产品。</p></div><span>本月均值 ${currency(insights.monthAverage)} · 累计均值 ${currency(insights.average)} · 累计第一名 ${escapeHtml(insights.leader?.name || "-")} ${currency(insights.leader?.value || 0)}</span></div><div class="table-wrap group-ai-table-wrap"><table class="group-ai-table"><thead><tr><th>员工</th><th class="number">群数</th><th class="number">订单</th><th class="number">本月群产值</th><th class="number">累计群产值</th><th>单月/累计业绩判断</th><th>优先追赶单品</th><th>详细追赶目标</th><th>针对性销售建议</th></tr></thead><tbody>${rows}</tbody></table></div><p class="group-ai-disclaimer">品牌建议原则：优先使用乐米倍优官方产品资料、标签、资质信息和已授权真实评价；不得编造好评，不作疾病治疗、预防或夸大功效承诺。</p>`;
+  elements.groupEmployeeAiAnalysis.innerHTML = `<div class="group-ai-heading"><div><h3>员工 AI 业绩分析与跟进建议</h3><p>本月按 ${escapeHtml(elements.groupMonth.value)} 计算单月均值；年度总数据按所选年度、各微信群匹配到的ERP订单计算。推荐单品优先参考本月高产值且员工低于均值的产品。</p></div><span>本月均值 ${currency(insights.monthAverage)} · 年度均值 ${currency(insights.average)} · 年度第一名 ${escapeHtml(insights.leader?.name || "-")} ${currency(insights.leader?.value || 0)}</span></div><div class="table-wrap group-ai-table-wrap"><table class="group-ai-table"><thead><tr><th>员工</th><th class="number">群数</th><th class="number">订单</th><th class="number">本月群产值</th><th class="number">年度群产值</th><th>单月/年度业绩判断</th><th>优先追赶单品</th><th>详细追赶目标</th><th>针对性销售建议</th></tr></thead><tbody>${rows}</tbody></table></div><p class="group-ai-disclaimer">品牌建议原则：优先使用乐米倍优官方产品资料、标签、资质信息和已授权真实评价；不得编造好评，不作疾病治疗、预防或夸大功效承诺。</p>`;
 }
 
 function renderGroupAnalysis() {
@@ -1005,17 +1025,17 @@ function renderGroupAnalysis() {
   const staffNames = [...new Set([...(monthlyReport?.staff || []).map(person => person.name), ...STAFF_ROSTER.map(person => person.name)])].filter(Boolean).sort((a, b) => a.localeCompare(b, "zh-CN"));
   elements.groupStaffNames.innerHTML = staffNames.map(name => `<option value="${escapeHtml(name)}"></option>`).join("");
   const editable = groupAssignmentsEditable();
-  const rangeLabel = groupRangeActive ? "区间" : "该月";
+  const rangeLabel = groupRangeActive ? "年度" : "本月";
   elements.groupConfigOrdersLabel.textContent = `${rangeLabel}订单`;
   elements.groupConfigValueLabel.textContent = `${rangeLabel}群产值`;
   elements.groupAssignmentBody.innerHTML = groupNumbers.map(groupNumber => {
-    const setting = saved.get(groupNumber) || { groupNumber, employeeName: latestEmployee.get(groupNumber) || "", startAt: "", memberCount: 0 };
-    const groupOrders = (ordersByGroup.get(groupNumber) || []).filter(order => !setting.startAt || normalizeTime(order.orderTime) >= normalizeTime(setting.startAt));
+    const setting = saved.get(groupNumber) || { groupNumber, employeeName: latestEmployee.get(groupNumber) || "", memberCount: 0 };
+    const groupOrders = ordersByGroup.get(groupNumber) || [];
     const value = groupOrders.reduce((sum, order) => sum + groupOrderNet(order), 0);
     const choices = [...new Set([...staffNames, setting.employeeName].filter(Boolean))].map(name => `<option value="${escapeHtml(name)}"${name === setting.employeeName ? " selected" : ""}>${escapeHtml(name)}${!staffNames.includes(name) ? "（历史人员）" : ""}</option>`).join("");
     const memberCount = Math.max(0, Math.trunc(amount(setting.memberCount)));
-    return `<tr data-group-assignment="${escapeHtml(groupNumber)}"><td>${editable ? `<select class="group-input" data-group-employee aria-label="${escapeHtml(groupNumber)} 维护员工"><option value="">未分配</option>${choices}</select>` : `<strong>${escapeHtml(setting.employeeName || "未填写")}</strong>`}</td><td><strong class="group-number">${escapeHtml(groupNumber)}</strong></td><td>${editable ? `<input class="group-input group-time-input" data-group-start type="datetime-local" value="${escapeHtml(String(setting.startAt || "").replace(" ", "T").slice(0, 16))}" />` : escapeHtml(setting.startAt || "未填写")}</td><td class="number">${editable ? `<input class="group-input group-member-input" data-group-members type="number" min="0" max="1000000" step="1" value="${memberCount || ""}" placeholder="未填写" aria-label="${escapeHtml(groupNumber)} 群人数" />` : (memberCount || "-")}</td><td class="number">${setting.startAt ? new Set(groupOrders.map(order => order.orderKey)).size : "-"}</td><td class="number net-amount">${setting.startAt ? currency(value) : "-"}</td></tr>`;
-  }).join("") || '<tr><td colspan="6"><div class="empty-state"><strong>该月尚未发现客户微信群号</strong><span>管理员可点击“同步订单管理”读取最新数据。</span></div></td></tr>';
+    return `<tr data-group-assignment="${escapeHtml(groupNumber)}"><td>${editable ? `<select class="group-input" data-group-employee aria-label="${escapeHtml(groupNumber)} 维护员工"><option value="">未分配</option>${choices}</select>` : `<strong>${escapeHtml(setting.employeeName || "未填写")}</strong>`}</td><td>${editable ? `<input class="group-input group-number-input" data-group-number value="${escapeHtml(groupNumber)}" aria-label="微信群号" />` : `<strong class="group-number">${escapeHtml(groupNumber)}</strong>`}</td><td class="number">${editable ? `<input class="group-input group-member-input" data-group-members type="number" min="0" max="1000000" step="1" value="${memberCount || ""}" placeholder="未填写" aria-label="${escapeHtml(groupNumber)} 好友数量" />` : (memberCount || "-")}</td><td class="number">${new Set(groupOrders.map(order => order.orderKey)).size}</td><td class="number net-amount">${currency(value)}</td></tr>`;
+  }).join("") || '<tr><td colspan="5"><div class="empty-state"><strong>本月尚未发现客户微信群号</strong><span>管理员可点击“同步订单管理”读取最新数据。</span></div></td></tr>';
 
   const report = buildGroupReport(selectedPrefix);
   elements.configuredGroupCount.textContent = report.groups.length;
@@ -1027,7 +1047,7 @@ function renderGroupAnalysis() {
     ? `${selectedPrefix ? `${selectedPrefix} 开头 · ` : ""}${groupPeriodLabel()} · ${formatDateTime(groupOrderSnapshot.updatedAt)} · ${visibleOrders.length} 个有群号订单${missingText}`
     : `尚未同步${groupRangeActive ? "所选区间" : "该月"}订单管理数据`;
   if (!report.groups.length) {
-    elements.groupComparison.innerHTML = '<div class="empty-state group-empty"><strong>请先填写员工姓名和接群时间</strong><span>保存后才会把该群在接群时间之后的订单纳入对比。</span></div>';
+    elements.groupComparison.innerHTML = '<div class="empty-state group-empty"><strong>请先填写维护员工和微信群号</strong><span>保存后会按微信群号匹配ERP订单，并分别展示本月与年度总数据。</span></div>';
     renderGroupEmployeeAiAnalysis(report);
     return;
   }
@@ -1043,14 +1063,14 @@ function renderGroupAnalysis() {
     }).join("");
     const insight = groupSuggestion(group, report);
     const rateClass = group.developmentRate !== null && report.averageDevelopmentRate !== null && group.developmentRate < report.averageDevelopmentRate ? " group-below" : "";
-    return `<tr><td><strong>${escapeHtml(group.employeeName)}</strong></td><td><strong class="group-number">${escapeHtml(group.groupNumber)}</strong></td><td>${escapeHtml(group.startAt.slice(0, 16))}</td><td class="number">${group.memberCount || "-"}</td><td class="number">${group.orders.size}</td><td class="number">${currency(group.monthValue)}</td><td class="number${totalClass}"><button class="group-insight" type="button" title="${escapeHtml(insight)}">${escapeHtml(currency(group.value))}<span aria-hidden="true">i</span></button></td><td class="number">${plainNumber(group.productQuantity)}</td><td class="number">${group.productTypes}</td><td class="number">${plainNumber(group.productShare, 1)}%</td><td class="number${rateClass}" title="区间去重订单数 ${group.orders.size} ÷ 群人数 ${group.memberCount || "未填写"}">${group.developmentRate === null ? "-" : `${plainNumber(group.developmentRate, 1)}%`}</td>${cells}</tr>`;
+    return `<tr><td><strong>${escapeHtml(group.employeeName)}</strong></td><td><strong class="group-number">${escapeHtml(group.groupNumber)}</strong></td><td class="number">${group.memberCount || "-"}</td><td class="number">${group.orders.size}</td><td class="number">${currency(group.monthValue)}</td><td class="number${totalClass}"><button class="group-insight" type="button" title="${escapeHtml(insight)}">${escapeHtml(currency(group.value))}<span aria-hidden="true">i</span></button></td><td class="number">${plainNumber(group.productQuantity)}</td><td class="number">${group.productTypes}</td><td class="number">${plainNumber(group.productShare, 1)}%</td><td class="number${rateClass}" title="年度去重订单数 ${group.orders.size} ÷ 好友数量 ${group.memberCount || "未填写"}">${group.developmentRate === null ? "-" : `${plainNumber(group.developmentRate, 1)}%`}</td>${cells}</tr>`;
   }).join("");
   const averages = report.productNames.map(name => `<td class="number group-average-cell">${plainNumber(report.productStats.get(name).average)}</td>`).join("");
-  const tableWidth = 1250 + report.productNames.length * 130;
+  const tableWidth = 1120 + report.productNames.length * 130;
   const averageQuantity = report.groups.length ? report.groups.reduce((sum, group) => sum + group.productQuantity, 0) / report.groups.length : 0;
   const averageTypes = report.groups.length ? report.groups.reduce((sum, group) => sum + group.productTypes, 0) / report.groups.length : 0;
   const averageMonthValue = report.groups.length ? report.groups.reduce((sum, group) => sum + group.monthValue, 0) / report.groups.length : 0;
-  elements.groupComparison.innerHTML = `<div class="group-legend"><span><i class="legend-swatch below"></i>低于均值</span><span><i class="legend-swatch leader"></i>区间第一</span><span>产品列显示件数；悬停累计总业绩可查看分析建议</span></div><div class="table-wrap"><table class="group-comparison-table" style="min-width:${tableWidth}px"><thead><tr><th>员工姓名</th><th>群号</th><th>接群时间</th><th class="number">群人数</th><th class="number">区间订单</th><th class="number">单月业绩</th><th class="number">累计总业绩</th><th class="number">产品总件数</th><th class="number">开发单品种类</th><th class="number">产品开发占比</th><th class="number">群内开发率</th>${headers}</tr></thead><tbody>${rows}</tbody><tfoot><tr><td></td><td><strong>群均值</strong></td><td></td><td></td><td class="number">${plainNumber(report.averageOrders, 1)}</td><td class="number">${currency(averageMonthValue)}</td><td class="number">${currency(report.average)}</td><td class="number">${plainNumber(averageQuantity, 1)}</td><td class="number">${plainNumber(averageTypes, 1)}</td><td class="number">${plainNumber(report.averageProductShare, 1)}%</td><td class="number">${report.averageDevelopmentRate === null ? "-" : `${plainNumber(report.averageDevelopmentRate, 1)}%`}</td>${averages}</tr></tfoot></table></div>`;
+  elements.groupComparison.innerHTML = `<div class="group-legend"><span><i class="legend-swatch below"></i>低于均值</span><span><i class="legend-swatch leader"></i>年度第一</span><span>产品列显示件数；累计总业绩可查看群级分析建议</span></div><div class="table-wrap"><table class="group-comparison-table" style="min-width:${tableWidth}px"><thead><tr><th>员工姓名</th><th>微信群</th><th class="number">好友数量</th><th class="number">年度订单</th><th class="number">本月业绩</th><th class="number">年度总业绩</th><th class="number">产品总件数</th><th class="number">开发单品种类</th><th class="number">产品开发占比</th><th class="number">群内开发率</th>${headers}</tr></thead><tbody>${rows}</tbody><tfoot><tr><td></td><td><strong>群均值</strong></td><td></td><td class="number">${plainNumber(report.averageOrders, 1)}</td><td class="number">${currency(averageMonthValue)}</td><td class="number">${currency(report.average)}</td><td class="number">${plainNumber(averageQuantity, 1)}</td><td class="number">${plainNumber(averageTypes, 1)}</td><td class="number">${plainNumber(report.averageProductShare, 1)}%</td><td class="number">${report.averageDevelopmentRate === null ? "-" : `${plainNumber(report.averageDevelopmentRate, 1)}%`}</td>${averages}</tr></tfoot></table></div>`;
   renderGroupEmployeeAiAnalysis(report);
 }
 
@@ -1125,9 +1145,8 @@ async function syncAnnualPerformanceData() {
 async function loadGroupAnalysis() {
   try {
     const month = elements.groupMonth.value || elements.reportMonth.value;
-    const months = groupRangeActive
-      ? groupMonthSequence(elements.groupStartMonth.value, elements.groupEndMonth.value)
-      : groupMonthSequence(month, month);
+    const year = month.slice(0, 4);
+    const months = groupRangeActive ? groupMonthSequence(`${year}-01`, `${year}-12`) : groupMonthSequence(month, month);
     const [snapshot, assignments] = await Promise.all([
       Promise.all(months.map(item => fetchJson(`/api/group-orders?month=${encodeURIComponent(item)}`))),
       fetchJson("/api/group-assignments"),
@@ -1140,36 +1159,37 @@ async function loadGroupAnalysis() {
 
 async function applyGroupRange() {
   try {
-    groupMonthSequence(elements.groupStartMonth.value, elements.groupEndMonth.value);
-    groupRangeActive = true;
-    localStorage.setItem(GROUP_RANGE_KEY, JSON.stringify({ start: elements.groupStartMonth.value, end: elements.groupEndMonth.value }));
+    groupRangeActive = false;
     await loadGroupAnalysis();
+    showToast(`已切换到 ${elements.groupMonth.value} 本月数据`);
   } catch (error) { showToast(error.message); }
 }
 
 async function applyGroupJoinRange() {
-  const starts = (groupAssignments.assignments || []).map(item => String(item.startAt || "").slice(0, 7)).filter(Boolean).sort();
-  if (!starts.length) { showToast("请先填写并保存至少一个群的接群时间"); return; }
-  elements.groupStartMonth.value = starts[0];
-  elements.groupEndMonth.value = elements.groupMonth.value || elements.reportMonth.value;
-  await applyGroupRange();
+  groupRangeActive = true;
+  await loadGroupAnalysis();
+  showToast(`已切换到 ${elements.groupMonth.value.slice(0, 4)} 年度群总数据`);
 }
 
 async function saveGroupAssignmentSettings() {
   const updates = [...document.querySelectorAll("[data-group-assignment]")].map(row => ({
     groupNumber: row.dataset.groupAssignment,
     employeeName: row.querySelector("[data-group-employee]")?.value.trim() || "",
-    startAt: row.querySelector("[data-group-start]")?.value || "",
     memberCount: Math.max(0, Math.trunc(amount(row.querySelector("[data-group-members]")?.value))),
   }));
   const merged = new Map((groupAssignments.assignments || []).map(item => [item.groupNumber, item]));
-  updates.forEach(item => merged.set(item.groupNumber, item));
+  updates.forEach(item => {
+    const row = document.querySelector(`[data-group-assignment="${CSS.escape(item.groupNumber)}"]`);
+    const editedGroupNumber = row?.querySelector("[data-group-number]")?.value.trim() || item.groupNumber;
+    if (editedGroupNumber !== item.groupNumber) merged.delete(item.groupNumber);
+    merged.set(editedGroupNumber, { ...item, groupNumber: editedGroupNumber });
+  });
   const assignments = [...merged.values()];
   elements.saveGroupAssignments.disabled = true;
   try {
     groupAssignments = await fetchJson("/api/group-assignments", { method: "POST", body: JSON.stringify({ assignments }) });
     renderGroupAnalysis();
-    showToast("群号归属、群人数和接群时间已保存，群数据已重新计算");
+    showToast("维护员工、微信群和好友数量已保存，群数据已重新计算");
   } catch (error) { showToast(`保存失败：${error.message}`); }
   finally { elements.saveGroupAssignments.disabled = false; }
 }
@@ -1191,9 +1211,8 @@ async function syncGroupOrderData() {
 }
 
 async function syncGroupRangeData() {
-  let months;
-  try { months = groupMonthSequence(elements.groupStartMonth.value, elements.groupEndMonth.value); }
-  catch (error) { showToast(error.message); return; }
+  const year = (elements.groupMonth.value || elements.reportMonth.value).slice(0, 4);
+  const months = groupMonthSequence(`${year}-01`, `${year}-12`);
   groupRangeActive = true;
   elements.syncGroupRange.disabled = true;
   elements.syncGroupRange.classList.add("is-refreshing");

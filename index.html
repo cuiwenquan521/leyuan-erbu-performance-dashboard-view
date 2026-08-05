@@ -157,7 +157,7 @@
         </div>
         <section class="data-section">
           <div class="section-heading matrix-heading">
-            <div><h2>员工产品数据对比</h2><p>按完整月产品销量统计，姓名可打开产品业绩明细</p></div>
+            <div><h2>员工产品数据对比</h2><p>按完整月订单号去重统计；产品分类按ERP订单产品名称匹配</p></div>
             <div class="matrix-heading-meta">
               <span id="staffAnalysisPeriod" class="section-status"></span>
               <div class="matrix-legend" aria-label="颜色说明"><span><i class="legend-swatch below"></i>低于均值</span><span><i class="legend-swatch leader"></i>单品第一</span></div>
@@ -186,25 +186,23 @@
             <span id="groupDataState" class="section-status">尚未载入订单管理数据</span>
           </div>
           <div class="group-toolbar">
-            <div class="field-group compact-field"><label for="groupMonth">分析月份</label><input id="groupMonth" type="month" /></div>
+            <div class="field-group compact-field"><label for="groupMonth">本月分析</label><input id="groupMonth" type="month" /></div>
             <div class="field-group compact-field"><label for="groupPrefixFilter">群号分类</label><input id="groupPrefixFilter" type="search" list="groupPrefixOptions" placeholder="如 AA 或 A*" autocomplete="off" title="可选择两位群号前缀，或输入 A* 等自定义前缀" /><datalist id="groupPrefixOptions"><option value="">全部群号</option></datalist></div>
             <button id="syncGroupOrders" class="button" type="button">↻ 同步订单管理</button>
-            <button id="saveGroupAssignments" class="button primary" type="button">保存群号、人数与接群时间</button>
+            <button id="saveGroupAssignments" class="button primary" type="button">保存维护员工、微信群与好友数量</button>
             <div class="group-range-row">
-              <strong>自定义累计月份</strong>
-              <div class="field-group compact-field"><label for="groupStartMonth">开始月份</label><input id="groupStartMonth" type="month" /></div>
-              <span class="group-range-separator">至</span>
-              <div class="field-group compact-field"><label for="groupEndMonth">结束月份</label><input id="groupEndMonth" type="month" /></div>
-              <button id="applyGroupRange" class="button" type="button">查看累计</button>
-              <button id="useGroupJoinMonth" class="button" type="button">按接群时间累计</button>
-              <button id="syncGroupRange" class="button primary" type="button">↻ 同步累计区间</button>
+              <strong>年度口径</strong>
+              <button id="applyGroupRange" class="button" type="button">查看本月</button>
+              <button id="useGroupJoinMonth" class="button" type="button">查看接群总数据</button>
+              <button id="syncGroupRange" class="button primary" type="button">↻ 同步本年度群数据</button>
             </div>
-            <p>每个群只计算接群时间之后的数据；群内开发率 = 区间去重订单数 ÷ 群人数。群人数未填写时显示“-”。</p>
+            <input id="groupStartMonth" type="month" hidden /><input id="groupEndMonth" type="month" hidden />
+            <p>本月查看当前月份；接群总数据按所选月份所在年度汇总。群内开发率 = 年度去重订单数 ÷ 好友数量；好友数量未填写时显示“-”。</p>
           </div>
           <datalist id="groupStaffNames"></datalist>
           <div class="table-wrap group-config-wrap">
             <table class="group-config-table">
-              <thead><tr><th>维护员工</th><th>客户微信群号</th><th>接群时间</th><th class="number">群人数</th><th id="groupConfigOrdersLabel" class="number">该月订单</th><th id="groupConfigValueLabel" class="number">该月群产值</th></tr></thead>
+              <thead><tr><th>维护员工</th><th>微信群</th><th class="number">好友数量</th><th id="groupConfigOrdersLabel" class="number">本月订单</th><th id="groupConfigValueLabel" class="number">本月群产值</th></tr></thead>
               <tbody id="groupAssignmentBody"></tbody>
             </table>
           </div>
