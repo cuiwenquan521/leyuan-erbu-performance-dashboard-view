@@ -56,6 +56,7 @@ const elements = {
   groupAverageValue: document.querySelector("#groupAverageValue"),
   groupAverageOrders: document.querySelector("#groupAverageOrders"),
   groupComparison: document.querySelector("#groupComparison"),
+  groupEmployeeAiAnalysis: document.querySelector("#groupEmployeeAiAnalysis"),
   groupStaffNames: document.querySelector("#groupStaffNames"),
   reportMonth: document.querySelector("#reportMonth"),
   teamTarget: document.querySelector("#teamTarget"),
@@ -844,6 +845,109 @@ function groupSuggestion(group, report) {
   return `AI分析建议（基于所选区间数据）\n${messages.join("\n")}`;
 }
 
+function groupProductSalesDirection(productName) {
+  const name = String(productName || "");
+  if (/DHA|藻油/i.test(name)) {
+    return "DHA方向：先确认宝宝年龄、日常饮食和家长关注点，再讲清原料来源、产品规格、食用方式与保存方法；使用乐米倍优官方产品图、标签和资质材料，成交后回访食用便利度，不使用“提高智力、治疗或预防疾病”等表述。";
+  }
+  if (/益生菌|乳糖酶/.test(name)) {
+    return "肠道营养方向：围绕使用场景、菌株或配方信息、冲调与保存要求做需求匹配；引用乐米倍优官方标签及已授权真实使用反馈，不把食品描述成治疗方案。";
+  }
+  if (/乳铁蛋白|铁|钙|锌|维生素/.test(name)) {
+    return "营养补充方向：先了解现有膳食和同类产品使用情况，重点讲规格、营养成分与食用方法；不替客户诊断缺乏症，不承诺疾病预防或治疗效果。";
+  }
+  if (/米粉|辅食/.test(name)) {
+    return "辅食方向：围绕适用月龄、配料信息、口感与冲调方法沟通，结合官方食用指南做首次尝试和复购回访，避免绝对化宣传。";
+  }
+  return "销售方向：先用需求问题确认适用场景，再讲清规格、配料或营养信息、食用方法和售后跟进；品牌内容仅使用乐米倍优官方素材、资质信息及已授权真实评价。";
+}
+
+function buildEmployeeGroupInsights(report) {
+  const employees = new Map();
+  report.groups.forEach(group => {
+    const employee = employees.get(group.employeeName) || {
+      name: group.employeeName,
+      groups: 0,
+      orders: new Set(),
+      value: 0,
+      monthValue: 0,
+      products: new Map(),
+    };
+    employee.groups += 1;
+    group.orders.forEach(orderKey => employee.orders.add(orderKey));
+    employee.value += group.value;
+    employee.monthValue += group.monthValue;
+    group.products.forEach(product => {
+      const item = employee.products.get(product.name) || { name: product.name, quantity: 0, value: 0 };
+      item.quantity += product.quantity;
+      item.value += product.value;
+      employee.products.set(product.name, item);
+    });
+    employees.set(group.employeeName, employee);
+  });
+  const rows = [...employees.values()];
+  const average = rows.length ? rows.reduce((sum, employee) => sum + employee.value, 0) / rows.length : 0;
+  const leader = rows.reduce((best, employee) => !best || employee.value > best.value ? employee : best, null);
+  const productStats = new Map(report.productNames.map(name => {
+    const quantities = rows.map(employee => employee.products.get(name)?.quantity || 0);
+    const totalValue = rows.reduce((sum, employee) => sum + (employee.products.get(name)?.value || 0), 0);
+    const totalQuantity = quantities.reduce((sum, quantity) => sum + quantity, 0);
+    return [name, {
+      averageQuantity: rows.length ? totalQuantity / rows.length : 0,
+      maximumQuantity: Math.max(0, ...quantities),
+      unitValue: totalQuantity > 0 ? totalValue / totalQuantity : 0,
+      totalValue,
+    }];
+  }));
+  rows.forEach(employee => {
+    const candidates = report.productNames.map(name => {
+      const stats = productStats.get(name);
+      const current = employee.products.get(name)?.quantity || 0;
+      const quantityGap = Math.max(0, stats.averageQuantity - current);
+      const score = stats.totalValue * (1 + quantityGap / Math.max(1, stats.averageQuantity));
+      return { name, current, quantityGap, ...stats, score };
+    }).filter(item => item.unitValue > 0).sort((left, right) => right.score - left.score);
+    const priority = candidates.find(item => item.quantityGap > 0) || candidates[0] || null;
+    const gapToAverage = Math.max(0, average - employee.value);
+    const gapToLeader = leader && leader.name !== employee.name ? Math.max(0, leader.value - employee.value + 0.01) : 0;
+    employee.gapToAverage = gapToAverage;
+    employee.gapToLeader = gapToLeader;
+    employee.priority = priority;
+    employee.unitsToAverage = priority && gapToAverage > 0 ? Math.ceil(gapToAverage / priority.unitValue) : 0;
+    employee.unitsToLeader = priority && gapToLeader > 0 ? Math.ceil(gapToLeader / priority.unitValue) : 0;
+  });
+  return { rows: rows.sort((left, right) => right.value - left.value), average, leader, productStats };
+}
+
+function renderGroupEmployeeAiAnalysis(report) {
+  if (!elements.groupEmployeeAiAnalysis) return;
+  if (!report.groups.length) {
+    elements.groupEmployeeAiAnalysis.innerHTML = "";
+    return;
+  }
+  const insights = buildEmployeeGroupInsights(report);
+  const rows = insights.rows.map(employee => {
+    const priority = employee.priority;
+    const productName = priority?.name || "暂无可计算单品";
+    const productGap = priority ? Math.max(0, Math.ceil(priority.averageQuantity - priority.current)) : 0;
+    const targetText = !priority
+      ? "当前区间缺少产品明细"
+      : employee.gapToAverage > 0
+        ? `优先追 ${productGap || employee.unitsToAverage} 件可补齐该单品均值；按当前净单价测算，约 ${employee.unitsToAverage} 件可使员工群产值达到均值`
+        : employee.gapToLeader > 0
+          ? `已达到员工均值；按当前净单价测算，约 ${employee.unitsToLeader} 件可超过当前第一名`
+          : "当前排名第一，建议保持主力单品节奏，并复制成交方法到第二增长单品";
+    const performance = employee.gapToAverage > 0
+      ? `低于员工均值 ${currency(employee.gapToAverage)}`
+      : employee.gapToLeader > 0
+        ? `高于均值，距第一名 ${currency(employee.gapToLeader)}`
+        : "当前员工群产值第一";
+    const direction = priority ? groupProductSalesDirection(priority.name) : "先补齐产品明细，再依据客户需求制定跟进方向。";
+    return `<tr><td><strong>${escapeHtml(employee.name)}</strong></td><td class="number">${employee.groups}</td><td class="number">${employee.orders.size}</td><td class="number net-amount">${currency(employee.value)}</td><td class="group-ai-performance${employee.gapToAverage > 0 ? " group-ai-warning" : employee.gapToLeader === 0 ? " group-ai-leading" : ""}">${escapeHtml(performance)}</td><td><strong>${escapeHtml(productName)}</strong>${priority ? `<span>当前 ${plainNumber(priority.current)} 件 · 员工均值 ${plainNumber(priority.averageQuantity, 1)} 件 · 第一名 ${plainNumber(priority.maximumQuantity)} 件</span>` : ""}</td><td>${escapeHtml(targetText)}</td><td>${escapeHtml(direction)}</td></tr>`;
+  }).join("");
+  elements.groupEmployeeAiAnalysis.innerHTML = `<div class="group-ai-heading"><div><h3>员工 AI 业绩分析与跟进建议</h3><p>依据当前筛选区间的 ERP 群订单、净业绩和产品件数自动测算；件数目标按该单品当前区间平均净单价估算。</p></div><span>员工均值 ${currency(insights.average)} · 第一名 ${escapeHtml(insights.leader?.name || "-")} ${currency(insights.leader?.value || 0)}</span></div><div class="table-wrap group-ai-table-wrap"><table class="group-ai-table"><thead><tr><th>员工</th><th class="number">群数</th><th class="number">订单</th><th class="number">累计群产值</th><th>业绩判断</th><th>优先追赶单品</th><th>追赶目标</th><th>针对性销售建议</th></tr></thead><tbody>${rows}</tbody></table></div><p class="group-ai-disclaimer">品牌建议原则：优先使用乐米倍优官方产品资料、标签、资质信息和已授权真实评价；不得编造好评，不作疾病治疗、预防或夸大功效承诺。</p>`;
+}
+
 function renderGroupAnalysis() {
   const orders = Array.isArray(groupOrderSnapshot.orders) ? groupOrderSnapshot.orders : [];
   const saved = new Map((groupAssignments.assignments || []).map(item => [item.groupNumber, item]));
@@ -890,6 +994,7 @@ function renderGroupAnalysis() {
     : `尚未同步${groupRangeActive ? "所选区间" : "该月"}订单管理数据`;
   if (!report.groups.length) {
     elements.groupComparison.innerHTML = '<div class="empty-state group-empty"><strong>请先填写员工姓名和接群时间</strong><span>保存后才会把该群在接群时间之后的订单纳入对比。</span></div>';
+    renderGroupEmployeeAiAnalysis(report);
     return;
   }
   const topValue = Math.max(...report.groups.map(group => group.value));
@@ -912,6 +1017,7 @@ function renderGroupAnalysis() {
   const averageTypes = report.groups.length ? report.groups.reduce((sum, group) => sum + group.productTypes, 0) / report.groups.length : 0;
   const averageMonthValue = report.groups.length ? report.groups.reduce((sum, group) => sum + group.monthValue, 0) / report.groups.length : 0;
   elements.groupComparison.innerHTML = `<div class="group-legend"><span><i class="legend-swatch below"></i>低于均值</span><span><i class="legend-swatch leader"></i>区间第一</span><span>产品列显示件数；悬停累计总业绩可查看分析建议</span></div><div class="table-wrap"><table class="group-comparison-table" style="min-width:${tableWidth}px"><thead><tr><th>员工姓名</th><th>群号</th><th>接群时间</th><th class="number">群人数</th><th class="number">区间订单</th><th class="number">单月业绩</th><th class="number">累计总业绩</th><th class="number">产品总件数</th><th class="number">开发单品种类</th><th class="number">产品开发占比</th><th class="number">群内开发率</th>${headers}</tr></thead><tbody>${rows}</tbody><tfoot><tr><td></td><td><strong>群均值</strong></td><td></td><td></td><td class="number">${plainNumber(report.averageOrders, 1)}</td><td class="number">${currency(averageMonthValue)}</td><td class="number">${currency(report.average)}</td><td class="number">${plainNumber(averageQuantity, 1)}</td><td class="number">${plainNumber(averageTypes, 1)}</td><td class="number">${plainNumber(report.averageProductShare, 1)}%</td><td class="number">${report.averageDevelopmentRate === null ? "-" : `${plainNumber(report.averageDevelopmentRate, 1)}%`}</td>${averages}</tr></tfoot></table></div>`;
+  renderGroupEmployeeAiAnalysis(report);
 }
 
 function buildAnnualStaffRows(report) {
