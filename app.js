@@ -14,7 +14,7 @@ const PRODUCT_CATEGORIES = [
   { label: "接骨木莓", pattern: /接骨木莓/, hint: "产品名包含“接骨木莓”" },
   { label: "气血饮大盒", pattern: /高良姜礼盒手提袋|高良姜血蛋白多肽植物饮品\s*25\s*ml\s*[×x*]\s*60|L[-\s]?GLJ[-\s]?B\s*[（(]60[）)]/i, hint: "高良姜礼盒手提袋 350g、高良姜血蛋白多肽植物饮品 25mL×60（L-GLJ-D + L-GLJ-B（60）按同订单合并）" },
   { label: "气血饮小盒", pattern: /高良姜血蛋白多肽植物饮品\s*350\s*ml\s*[（(]25\s*ml\s*[×x*]\s*14\s*瓶[）)]|^L[-\s]?GLJ[-\s]?B$/i, hint: "高良姜血蛋白多肽植物饮品 350ml（25ml×14瓶），ERP 简称 L-GLJ-B" },
-  { label: "减脂饮", pattern: /柑橘饮/, hint: "产品名包含“柑橘饮”" },
+  { label: "减脂饮", pattern: /柑橘橘皮膳食纤维饮\s*500\s*mL\s*[（(]50\s*mL\s*[/／]袋\s*[＊*×x]\s*10\s*袋[）)]|^ZYSL-GJY$/i, hint: "柑橘橘皮膳食纤维饮 500mL（50mL/袋×10袋），ERP 简称 ZYSL-GJY；按订单编号去重" },
   { label: "胶原蛋白", pattern: /胶原蛋白(?!肽菁萃饮品)/, hint: "其他产品名包含“胶原蛋白”的产品，不含胶原蛋白青萃饮" },
   { label: "胶原蛋白青萃饮", pattern: /胶原蛋白肽菁萃饮品\s*350\s*ml\s*[（(]25\s*ml\s*[/／]\s*瓶\s*[×x*]\s*14\s*瓶[）)]|^L-CP-B$/i, hint: "胶原蛋白肽菁萃饮品 350ml（25ml/瓶×14瓶），ERP 简称 L-CP-B" },
   { label: "鲑鱼精", pattern: /固蕊鲑鱼精红石榴后生元凝胶糖果\s*21克\s*[（(]0\.7克\s*[×x*]\s*30粒[）)]|^S-GRH-G$/i, hint: "固蕊鲑鱼精红石榴后生元凝胶糖果 21克（0.7克×30粒），ERP 简称 S-GRH-G" },
