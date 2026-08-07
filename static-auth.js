@@ -20,7 +20,11 @@
       return result;
     } catch (error) {
       if (error.name === "AbortError") throw new Error("ERP 实时刷新超时，请检查 ERP 登录状态");
-      if (error instanceof TypeError) throw new Error("无法连接本机同步服务，请确认办公电脑已启动同步服务");
+      if (error instanceof TypeError) {
+        const connectionError = new Error("浏览器拦截了本机直连，正在切换隐藏同步");
+        connectionError.code = "LOCAL_ACCESS_BLOCKED";
+        throw connectionError;
+      }
       throw error;
     } finally {
       window.clearTimeout(timeout);
@@ -291,7 +295,7 @@
         try {
           await syncErpDirect(selectedDate);
         } catch (error) {
-          if (error instanceof TypeError) await syncErpThroughHiddenFrame(selectedDate);
+          if (error.code === "LOCAL_ACCESS_BLOCKED") await syncErpThroughHiddenFrame(selectedDate);
           else throw error;
         }
         button.innerHTML = '<span class="refresh-icon" aria-hidden="true">↻</span> 正在更新网页';
