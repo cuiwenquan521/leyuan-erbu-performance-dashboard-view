@@ -839,15 +839,16 @@ function buildGroupReport(prefix = "") {
     products.forEach(product => {
       const weight = Math.max(0, amount(product.apportionedAmount)) || Math.max(0, amount(product.quantity));
       const allocated = totalWeight ? net * weight / totalWeight : 0;
-      const item = group.products.get(product.name) || { name: product.name, quantity: 0, value: 0 };
+      const productKey = `${String(product.name || "")}\u0000${String(product.code || "")}`;
+      const item = group.products.get(productKey) || { name: product.name, code: product.code, quantity: 0, value: 0 };
       item.quantity += Math.max(0, amount(product.quantity));
       item.value += allocated;
-      group.products.set(product.name, item);
+      group.products.set(productKey, item);
       if (isCurrentMonth) {
-        const monthItem = group.monthProducts.get(product.name) || { name: product.name, quantity: 0, value: 0 };
+        const monthItem = group.monthProducts.get(productKey) || { name: product.name, code: product.code, quantity: 0, value: 0 };
         monthItem.quantity += Math.max(0, amount(product.quantity));
         monthItem.value += allocated;
-        group.monthProducts.set(product.name, monthItem);
+        group.monthProducts.set(productKey, monthItem);
       }
     });
   });
