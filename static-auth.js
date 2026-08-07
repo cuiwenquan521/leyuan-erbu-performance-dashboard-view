@@ -31,7 +31,7 @@
     }
   }
 
-  function syncErpThroughHiddenFrame(date) {
+  function syncErpThroughHiddenFrame(date, baselineGeneratedAt) {
     return new Promise((resolve, reject) => {
       const frame = document.createElement("iframe");
       frame.hidden = true;
@@ -39,11 +39,20 @@
       frame.src = `${LOCAL_DASHBOARD_ORIGIN}/bridge-sync?date=${encodeURIComponent(date)}`;
       const finish = (error, result) => {
         window.clearTimeout(timeout);
+        window.clearInterval(cloudPoll);
         window.removeEventListener("message", onMessage);
         frame.remove();
         if (error) reject(error); else resolve(result);
       };
-      const timeout = window.setTimeout(() => finish(new Error("后台 ERP 同步仍在执行，请稍后再点击获取最新数据")), 210_000);
+      const timeout = window.setTimeout(() => finish(new Error("后台 ERP 同步仍在执行，请稍后再点击获取最新数据")), 240_000);
+      const cloudPoll = window.setInterval(async () => {
+        try {
+          const response = await nativeFetch(`./encrypted-data.json?t=${Date.now()}`, { cache: "no-store" });
+          if (!response.ok) return;
+          const manifest = await response.json();
+          if (manifest.generatedAt !== baselineGeneratedAt) finish(null, { generatedAt: manifest.generatedAt });
+        } catch {}
+      }, 1500);
       const onMessage = event => {
         if (event.origin !== LOCAL_DASHBOARD_ORIGIN || event.source !== frame.contentWindow) return;
         if (event.data?.type === "leyuan-erp-sync-complete") finish(null, event.data);
@@ -295,7 +304,7 @@
         try {
           await syncErpDirect(selectedDate);
         } catch (error) {
-          if (error.code === "LOCAL_ACCESS_BLOCKED") await syncErpThroughHiddenFrame(selectedDate);
+          if (error.code === "LOCAL_ACCESS_BLOCKED") await syncErpThroughHiddenFrame(selectedDate, session.generatedAt);
           else throw error;
         }
         button.innerHTML = '<span class="refresh-icon" aria-hidden="true">↻</span> 正在更新网页';
