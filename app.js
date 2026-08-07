@@ -9,7 +9,7 @@ const PRODUCT_CATEGORIES = [
   { label: "益生菌", pattern: /益生菌/, hint: "产品名包含“益生菌”" },
   { label: "乳糖酶", pattern: /乳糖酶/, hint: "产品名包含“乳糖酶”" },
   { label: "DHA", pattern: /DHA/i, hint: "产品名包含“DHA”" },
-  { label: "海藻钙", pattern: /海藻钙/, hint: "产品名包含“海藻钙”" },
+  { label: "海藻钙", pattern: /(?:新款)?海藻粉高钙(?:VD|维D)凝胶糖果|^Ca-VD$|^L-CaVD-G$/i, hint: "新款海藻粉高钙VD凝胶糖果、海藻粉高钙维D凝胶糖果（180mg）、海藻粉高钙VD凝胶糖果（150mg），ERP 简称 Ca-VD、L-CaVD-G；按订单编号去重" },
   { label: "乳铁蛋白", pattern: /乳铁蛋白调制乳粉\s*(?:[（(]新版[）)])?\s*2\s*g\s*[/／]袋\s*[×x*]\s*60\s*袋|^LF$|^L-LF-P$/i, hint: "乳铁蛋白调制乳粉 2g/袋×60袋（含普通版与新版），ERP 简称 LF、L-LF-P；按订单编号去重" },
   { label: "接骨木莓", pattern: /接骨木莓针叶樱桃饮品\s*280\s*ml\s*[（(]10\s*ml\s*[/／]袋\s*[×x*]\s*28\s*袋[）)]|^ZYSL-JGMMYP$/i, hint: "接骨木莓针叶樱桃饮品 280ml（10ml/袋×28袋），ERP 简称 ZYSL-JGMMYP；按订单编号去重" },
   { label: "气血饮大盒", pattern: /高良姜礼盒手提袋|高良姜血蛋白多肽植物饮品\s*25\s*ml\s*[×x*]\s*60|L[-\s]?GLJ[-\s]?B\s*[（(]60[）)]/i, hint: "高良姜礼盒手提袋 350g、高良姜血蛋白多肽植物饮品 25mL×60（L-GLJ-D + L-GLJ-B（60）按同订单合并）" },
