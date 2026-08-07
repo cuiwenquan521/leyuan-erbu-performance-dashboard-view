@@ -389,6 +389,11 @@ tbody tr:hover { background: #f8fbfa; }
 .annual-staff-table tbody tr:nth-child(even) td { background: #e3f2f8; }
 .annual-staff-table tbody .annual-former-row td { background: #fff7df; }
 .annual-staff-table tfoot td { position: sticky; bottom: 0; z-index: 4; background: #d0e9f2; font-weight: 800; }
+
+/* Tables are comparison surfaces; keep every label, value and editable control on one alignment axis. */
+table th, table td, table input, table select, table button { text-align: center; }
+table .staff-cell, table .matrix-person-button, table .products, table .group-insight { justify-content: center; }
+table .target-input { margin-left: auto; margin-right: auto; }
 .annual-staff-table tfoot td:nth-child(-n+3) { z-index: 5; }
 .staff-status { display: inline-flex; min-width: 44px; justify-content: center; padding: 3px 7px; border-radius: 3px; font-size: 11px; font-weight: 800; }
 .staff-status.active { color: #126b58; background: #e3f4ef; border: 1px solid #a9d4c8; }
