@@ -1791,12 +1791,12 @@ async function handleStartupAction() {
   const shouldConnect = params.get("connect") === "1";
   const shouldSync = params.get("sync") === "1";
   const isBridge = params.get("bridge") === "1";
+  const bridgeHost = window.opener || (window.parent !== window ? window.parent : null);
   if (!shouldConnect && !shouldSync) return;
   history.replaceState(null, "", `${window.location.pathname}${window.location.hash}`);
   if (shouldConnect) {
     const result = await connectErp();
     if (isBridge) {
-      const bridgeHost = window.opener || (window.parent !== window ? window.parent : null);
       bridgeHost?.postMessage({ type: "leyuan-erp-connect-complete", connected: Boolean(result?.connected) }, "*");
       window.setTimeout(() => window.close(), 500);
     }
@@ -1811,7 +1811,6 @@ async function handleStartupAction() {
   const archive = await refreshErp();
   if (!isBridge) return;
   if (!archive) {
-    const bridgeHost = window.opener || (window.parent !== window ? window.parent : null);
     bridgeHost?.postMessage({ type: "leyuan-erp-sync-error", message: "ERP 同步失败，请检查本机同步服务和 ERP 登录状态" }, "*");
     return;
   }
