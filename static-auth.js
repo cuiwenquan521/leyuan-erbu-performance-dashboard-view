@@ -43,7 +43,7 @@
         frame.remove();
         if (error) reject(error); else resolve(result);
       };
-      const timeout = window.setTimeout(() => finish(new Error("ERP 实时刷新超时，请检查 ERP 登录状态")), 150_000);
+      const timeout = window.setTimeout(() => finish(new Error("后台 ERP 同步仍在执行，请稍后再点击获取最新数据")), 210_000);
       const onMessage = event => {
         if (event.origin !== LOCAL_DASHBOARD_ORIGIN || event.source !== frame.contentWindow) return;
         if (event.data?.type === "leyuan-erp-sync-complete") finish(null, event.data);
