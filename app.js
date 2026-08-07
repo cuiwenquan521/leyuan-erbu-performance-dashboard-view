@@ -1772,19 +1772,20 @@ async function handleStartupAction() {
   if (isGroupConfigBridge) {
     history.replaceState(null, "", window.location.pathname);
     const allowedOrigins = new Set(["https://cuiwenquan521.github.io", "http://127.0.0.1:8770"]);
+    const bridgeHost = window.opener || (window.parent !== window ? window.parent : null);
     const receiveGroupConfig = async event => {
-      if (event.source !== window.opener || !allowedOrigins.has(event.origin) || event.data?.type !== "leyuan-group-config-save") return;
+      if (event.source !== bridgeHost || !allowedOrigins.has(event.origin) || event.data?.type !== "leyuan-group-config-save") return;
       window.removeEventListener("message", receiveGroupConfig);
       try {
         const result = await fetchJson("/api/group-assignments", { method: "POST", body: JSON.stringify({ assignments: event.data.assignments }) });
-        window.opener?.postMessage({ type: "leyuan-group-config-saved", result }, event.origin);
+        bridgeHost?.postMessage({ type: "leyuan-group-config-saved", result }, event.origin);
         window.setTimeout(() => window.close(), 500);
       } catch (error) {
-        window.opener?.postMessage({ type: "leyuan-group-config-error", message: error.message }, event.origin);
+        bridgeHost?.postMessage({ type: "leyuan-group-config-error", message: error.message }, event.origin);
       }
     };
     window.addEventListener("message", receiveGroupConfig);
-    window.opener?.postMessage({ type: "leyuan-group-config-ready" }, "*");
+    bridgeHost?.postMessage({ type: "leyuan-group-config-ready" }, "*");
     return;
   }
   const shouldConnect = params.get("connect") === "1";
@@ -1795,7 +1796,8 @@ async function handleStartupAction() {
   if (shouldConnect) {
     const result = await connectErp();
     if (isBridge) {
-      window.opener?.postMessage({ type: "leyuan-erp-connect-complete", connected: Boolean(result?.connected) }, "*");
+      const bridgeHost = window.opener || (window.parent !== window ? window.parent : null);
+      bridgeHost?.postMessage({ type: "leyuan-erp-connect-complete", connected: Boolean(result?.connected) }, "*");
       window.setTimeout(() => window.close(), 500);
     }
     return;
@@ -1809,7 +1811,8 @@ async function handleStartupAction() {
   const archive = await refreshErp();
   if (!isBridge) return;
   if (!archive) {
-    window.opener?.postMessage({ type: "leyuan-erp-sync-error", message: "ERP 同步失败，请检查本机同步服务和 ERP 登录状态" }, "*");
+    const bridgeHost = window.opener || (window.parent !== window ? window.parent : null);
+    bridgeHost?.postMessage({ type: "leyuan-erp-sync-error", message: "ERP 同步失败，请检查本机同步服务和 ERP 登录状态" }, "*");
     return;
   }
   const deadline = Date.now() + 120_000;
@@ -1827,11 +1830,11 @@ async function handleStartupAction() {
   }
   if (!publishComplete) {
     const message = publishError ? `云端发布失败：${publishError}` : "ERP 已同步，但等待云端发布超时";
-    window.opener?.postMessage({ type: "leyuan-erp-sync-error", message }, "*");
+    bridgeHost?.postMessage({ type: "leyuan-erp-sync-error", message }, "*");
     window.setTimeout(() => window.close(), 1500);
     return;
   }
-  window.opener?.postMessage({ type: "leyuan-erp-sync-complete", updatedAt: archive.updatedAt }, "*");
+  bridgeHost?.postMessage({ type: "leyuan-erp-sync-complete", updatedAt: archive.updatedAt }, "*");
   window.setTimeout(() => window.close(), 500);
 }
 

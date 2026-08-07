@@ -27,6 +27,29 @@
     }
   }
 
+  function syncErpThroughHiddenFrame(date) {
+    return new Promise((resolve, reject) => {
+      const frame = document.createElement("iframe");
+      frame.hidden = true;
+      frame.setAttribute("aria-hidden", "true");
+      frame.src = `${LOCAL_DASHBOARD_ORIGIN}/?sync=1&bridge=1&date=${encodeURIComponent(date)}`;
+      const finish = (error, result) => {
+        window.clearTimeout(timeout);
+        window.removeEventListener("message", onMessage);
+        frame.remove();
+        if (error) reject(error); else resolve(result);
+      };
+      const timeout = window.setTimeout(() => finish(new Error("ERP 实时刷新超时，请检查 ERP 登录状态")), 120_000);
+      const onMessage = event => {
+        if (event.origin !== LOCAL_DASHBOARD_ORIGIN || event.source !== frame.contentWindow) return;
+        if (event.data?.type === "leyuan-erp-sync-complete") finish(null, event.data);
+        if (event.data?.type === "leyuan-erp-sync-error") finish(new Error(event.data.message || "ERP 实时刷新失败"));
+      };
+      window.addEventListener("message", onMessage);
+      document.body.append(frame);
+    });
+  }
+
   function saveGroupAssignmentsThroughBridge(assignments) {
     return new Promise((resolve, reject) => {
       const popup = window.open(`${LOCAL_DASHBOARD_ORIGIN}/?group-config=1&bridge=1`, "leyuan-group-config-bridge", "width=720,height=520");
@@ -265,7 +288,12 @@
         }
         const selectedDate = document.querySelector("#reportDate")?.value || new Date().toISOString().slice(0, 10);
         button.innerHTML = '<span class="refresh-icon" aria-hidden="true">↻</span> 正在读取 ERP';
-        await syncErpDirect(selectedDate);
+        try {
+          await syncErpDirect(selectedDate);
+        } catch (error) {
+          if (error instanceof TypeError) await syncErpThroughHiddenFrame(selectedDate);
+          else throw error;
+        }
         button.innerHTML = '<span class="refresh-icon" aria-hidden="true">↻</span> 正在更新网页';
         const deadline = Date.now() + 120_000;
         while (Date.now() < deadline) {
