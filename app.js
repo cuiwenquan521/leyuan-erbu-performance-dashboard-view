@@ -12,7 +12,8 @@ const PRODUCT_CATEGORIES = [
   { label: "海藻钙", pattern: /海藻钙/, hint: "产品名包含“海藻钙”" },
   { label: "乳铁蛋白", pattern: /乳铁蛋白/, hint: "产品名包含“乳铁蛋白”" },
   { label: "接骨木莓", pattern: /接骨木莓/, hint: "产品名包含“接骨木莓”" },
-  { label: "气血饮大盒", pattern: /高良姜血红蛋白|高良姜礼盒/, hint: "高良姜血红蛋白、高良姜礼盒" },
+  { label: "气血饮大盒", pattern: /高良姜礼盒手提袋|高良姜血蛋白多肽植物饮品\s*25\s*ml\s*[×x*]\s*60|L[-\s]?GLJ[-\s]?B\s*[（(]60[）)]/i, hint: "高良姜礼盒手提袋 350g、高良姜血蛋白多肽植物饮品 25mL×60（L-GLJ-D + L-GLJ-B（60）按同订单合并）" },
+  { label: "气血饮小盒", pattern: /高良姜血蛋白多肽植物饮品\s*350\s*ml\s*[（(]25\s*ml\s*[×x*]\s*14\s*瓶[）)]|^L[-\s]?GLJ[-\s]?B$/i, hint: "高良姜血蛋白多肽植物饮品 350ml（25ml×14瓶），ERP 简称 L-GLJ-B" },
   { label: "减脂饮", pattern: /柑橘饮/, hint: "产品名包含“柑橘饮”" },
   { label: "胶原蛋白", pattern: /胶原蛋白/, hint: "产品名包含“胶原蛋白”" },
   { label: "鲐鱼精", pattern: /鲐鱼精/, hint: "产品名包含“鲐鱼精”" },
@@ -461,7 +462,7 @@ function render() {
     const categoryCounts = new Map(analysisReport.staff.map(person => {
       const personOrders = analysisReport.orders.filter(order => order.waiterName === person.name && order.countAsOrder);
       const counts = categoryColumns.map(({ label, pattern }) => {
-        const orderNumbers = new Set(personOrders.filter(order => (order.products || []).some(product => pattern.test(String(product.name || "")))).map(order => order.orderNumber));
+        const orderNumbers = new Set(personOrders.filter(order => (order.products || []).some(product => pattern.test(`${String(product.name || "")} ${String(product.code || "")}`))).map(order => order.orderNumber));
         return [label, orderNumbers.size];
       });
       return [person.name, { counts: new Map(counts) }];
@@ -789,7 +790,7 @@ function groupPeriodLabel(snapshot = groupOrderSnapshot) {
 function mergeProductsIntoCategories(products) {
   const categories = new Map(PRODUCT_CATEGORIES.map(({ label }) => [label, { name: label, quantity: 0, value: 0 }]));
   products.forEach(product => {
-    const category = PRODUCT_CATEGORIES.find(({ pattern }) => pattern.test(String(product.name || "")));
+    const category = PRODUCT_CATEGORIES.find(({ pattern }) => pattern.test(`${String(product.name || "")} ${String(product.code || "")}`));
     if (!category) return;
     const item = categories.get(category.label);
     item.quantity += Math.max(0, amount(product.quantity));
