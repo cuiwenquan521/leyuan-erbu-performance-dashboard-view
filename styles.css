@@ -393,6 +393,7 @@ tbody tr:hover { background: #f8fbfa; }
 /* Tables are comparison surfaces; keep every label, value and editable control on one alignment axis. */
 table th, table td, table input, table select, table button { text-align: center; }
 table .number, table .matrix-fixed, table .target-input, table .group-member-input, table .staff-matrix-detail td { text-align: center; }
+.staff-matrix-table .matrix-fixed { text-align: center; }
 table .staff-cell, table .matrix-person-button, table .products, table .group-insight { justify-content: center; }
 table .target-input { margin-left: auto; margin-right: auto; }
 .annual-staff-table tfoot td:nth-child(-n+3) { z-index: 5; }
