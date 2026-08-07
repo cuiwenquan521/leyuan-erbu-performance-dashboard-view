@@ -4,10 +4,10 @@ const STAFF_ROSTER = [
   { department: "乐源二部", name: "储玉岳" },
 ];
 const PRODUCT_CATEGORIES = [
-  { label: "洗护", pattern: /婴幼儿桃叶精华|幼然婴幼儿舒润|婴幼儿保湿霜/, hint: "婴幼儿桃叶精华、幼然婴幼儿舒润、婴幼儿保湿霜" },
-  { label: "营养包", pattern: /多种维生素矿物质|妈妈钙/, hint: "多种维生素矿物质、妈妈钙" },
-  { label: "益生菌", pattern: /益生菌/, hint: "产品名包含“益生菌”" },
-  { label: "乳糖酶", pattern: /乳糖酶/, hint: "产品名包含“乳糖酶”" },
+  { label: "洗护", pattern: /幼然婴幼儿舒润保湿霜\s*50\s*g|婴幼儿桃叶精华爽身露\s*150\s*ml|婴幼儿舒润身体乳\s*150\s*g|^Baby-[BYL]$/i, hint: "幼然婴幼儿舒润保湿霜 50g、婴幼儿桃叶精华爽身露 150ml、婴幼儿舒润身体乳 150g，ERP 简称 Baby-B、Baby-Y、Baby-L；按订单编号去重" },
+  { label: "营养包", pattern: /多种维生素矿物质片\s*0\.5\s*g\s*[/／]片\s*[×x*]\s*90\s*片|铁维生素C片\s*0\.8\s*g\s*[/／]片\s*[×x*]\s*90\s*片|钙维生素D软胶囊\s*0\.9\s*g\s*[×x*]\s*90\s*粒|^(?:Y-X|Fe-VC|MG-X)$/i, hint: "多种维生素矿物质片 0.5g/片×90片、铁维生素C片 0.8g/片×90片、钙维生素D软胶囊 0.9g×90粒，ERP 简称 Y-X、Fe-VC、MG-X；按订单编号去重" },
+  { label: "益生菌", pattern: /益生菌固体饮料\s*[（(]新版[）)]\s*80\s*克|乐米倍优益生菌固体饮料\s*2\s*g\s*[/／]袋\s*[×x*]\s*40\s*袋|^(?:L-Pro|Pro-S)$/i, hint: "益生菌固体饮料（新版）80克（2g/袋×40袋）、乐米倍优益生菌固体饮料 2g/袋×40袋，ERP 简称 L-Pro、Pro-S；按订单编号去重" },
+  { label: "乳糖酶", pattern: /乳糖酶调制乳粉(?:\s*[（(]新版[）)])?|乳糖酶滴剂(?:\s*[（(]新版[）)])?|^(?:β-GAL|L-β-GAL|ZYSL-RTM|ZYSL-RTM-D)$/i, hint: "乳糖酶调制乳粉 1.5g/袋×30袋、乳糖酶滴剂 15ml、乳糖酶调制乳粉（新版）45克、乳糖酶滴剂（新版）15ml，ERP 简称 β-GAL、ZYSL-RTM、L-β-GAL、ZYSL-RTM-D；按订单编号去重" },
   { label: "DHA", pattern: /DHA/i, hint: "产品名包含“DHA”" },
   { label: "海藻钙", pattern: /(?:新款)?海藻粉高钙(?:VD|维D)凝胶糖果|^Ca-VD$|^L-CaVD-G$/i, hint: "新款海藻粉高钙VD凝胶糖果、海藻粉高钙维D凝胶糖果（180mg）、海藻粉高钙VD凝胶糖果（150mg），ERP 简称 Ca-VD、L-CaVD-G；按订单编号去重" },
   { label: "乳铁蛋白", pattern: /乳铁蛋白调制乳粉\s*(?:[（(]新版[）)])?\s*2\s*g\s*[/／]袋\s*[×x*]\s*60\s*袋|^LF$|^L-LF-P$/i, hint: "乳铁蛋白调制乳粉 2g/袋×60袋（含普通版与新版），ERP 简称 LF、L-LF-P；按订单编号去重" },
