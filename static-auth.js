@@ -36,14 +36,14 @@
       const frame = document.createElement("iframe");
       frame.hidden = true;
       frame.setAttribute("aria-hidden", "true");
-      frame.src = `${LOCAL_DASHBOARD_ORIGIN}/?sync=1&bridge=1&date=${encodeURIComponent(date)}`;
+      frame.src = `${LOCAL_DASHBOARD_ORIGIN}/bridge-sync?date=${encodeURIComponent(date)}`;
       const finish = (error, result) => {
         window.clearTimeout(timeout);
         window.removeEventListener("message", onMessage);
         frame.remove();
         if (error) reject(error); else resolve(result);
       };
-      const timeout = window.setTimeout(() => finish(new Error("ERP 实时刷新超时，请检查 ERP 登录状态")), 120_000);
+      const timeout = window.setTimeout(() => finish(new Error("ERP 实时刷新超时，请检查 ERP 登录状态")), 150_000);
       const onMessage = event => {
         if (event.origin !== LOCAL_DASHBOARD_ORIGIN || event.source !== frame.contentWindow) return;
         if (event.data?.type === "leyuan-erp-sync-complete") finish(null, event.data);
