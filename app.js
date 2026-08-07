@@ -16,8 +16,14 @@ const PRODUCT_CATEGORIES = [
   { label: "气血饮小盒", pattern: /高良姜血蛋白多肽植物饮品\s*350\s*ml\s*[（(]25\s*ml\s*[×x*]\s*14\s*瓶[）)]|^L[-\s]?GLJ[-\s]?B$/i, hint: "高良姜血蛋白多肽植物饮品 350ml（25ml×14瓶），ERP 简称 L-GLJ-B" },
   { label: "减脂饮", pattern: /柑橘饮/, hint: "产品名包含“柑橘饮”" },
   { label: "胶原蛋白", pattern: /胶原蛋白/, hint: "产品名包含“胶原蛋白”" },
-  { label: "鲐鱼精", pattern: /鲐鱼精/, hint: "产品名包含“鲐鱼精”" },
+  { label: "鲑鱼精", pattern: /固蕊鲑鱼精红石榴后生元凝胶糖果\s*21克\s*[（(]0\.7克\s*[×x*]\s*30粒[）)]|^S-GRH-G$/i, hint: "固蕊鲑鱼精红石榴后生元凝胶糖果 21克（0.7克×30粒），ERP 简称 S-GRH-G" },
 ];
+
+function matchesProductCategory(category, product) {
+  const name = String(product?.name || "");
+  const code = String(product?.code || "");
+  return category.pattern.test(name) || category.pattern.test(code);
+}
 
 const elements = {
   date: document.querySelector("#reportDate"),
@@ -461,8 +467,9 @@ function render() {
     const categoryColumns = PRODUCT_CATEGORIES;
     const categoryCounts = new Map(analysisReport.staff.map(person => {
       const personOrders = analysisReport.orders.filter(order => order.waiterName === person.name && order.countAsOrder);
-      const counts = categoryColumns.map(({ label, pattern }) => {
-        const orderNumbers = new Set(personOrders.filter(order => (order.products || []).some(product => pattern.test(`${String(product.name || "")} ${String(product.code || "")}`))).map(order => order.orderNumber));
+      const counts = categoryColumns.map(category => {
+        const { label } = category;
+        const orderNumbers = new Set(personOrders.filter(order => (order.products || []).some(product => matchesProductCategory(category, product))).map(order => order.orderNumber));
         return [label, orderNumbers.size];
       });
       return [person.name, { counts: new Map(counts) }];
@@ -790,7 +797,7 @@ function groupPeriodLabel(snapshot = groupOrderSnapshot) {
 function mergeProductsIntoCategories(products) {
   const categories = new Map(PRODUCT_CATEGORIES.map(({ label }) => [label, { name: label, quantity: 0, value: 0 }]));
   products.forEach(product => {
-    const category = PRODUCT_CATEGORIES.find(({ pattern }) => pattern.test(`${String(product.name || "")} ${String(product.code || "")}`));
+    const category = PRODUCT_CATEGORIES.find(category => matchesProductCategory(category, product));
     if (!category) return;
     const item = categories.get(category.label);
     item.quantity += Math.max(0, amount(product.quantity));
