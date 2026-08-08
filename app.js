@@ -1186,6 +1186,7 @@ async function loadGroupAnalysis() {
     groupOrderSnapshot = mergeGroupOrderSnapshots(snapshot, months);
     groupAssignments = assignments;
     renderGroupAnalysis();
+    if (monthlyReport) render();
   } catch (error) { showToast(`群产值加载失败：${error.message}`); }
 }
 
