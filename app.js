@@ -795,6 +795,12 @@ function groupPeriodLabel(snapshot = groupOrderSnapshot) {
   return start === end ? display(start) : `${display(start)} - ${display(end)}`;
 }
 
+function monthlyEligibleProductOrders(month) {
+  const syncedMonths = Array.isArray(groupOrderSnapshot.syncedMonths) ? groupOrderSnapshot.syncedMonths : [];
+  if (!syncedMonths.includes(month)) return null;
+  return (groupOrderSnapshot.orders || []).filter(order => String(order.orderTime || "").slice(0, 7) === month);
+}
+
 function mergeProductsIntoCategories(products) {
   const categories = new Map(PRODUCT_CATEGORIES.map(({ label }) => [label, { name: label, quantity: 0, value: 0 }]));
   products.forEach(product => {
