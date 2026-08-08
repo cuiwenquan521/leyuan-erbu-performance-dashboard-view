@@ -474,7 +474,7 @@ function render() {
         const orderNumbers = new Set(personOrders.filter(order => (order.products || []).some(product => matchesProductCategory(category, product))).map(order => order.orderKey));
         return [label, orderNumbers.size];
       });
-      return [person.name, { counts: new Map(counts) }];
+      return [person.name, { orderCount: new Set(personOrders.map(order => order.orderKey)).size, counts: new Map(counts) }];
     }));
     const categoryStats = new Map(categoryColumns.map(({ label }) => {
       const values = analysisReport.staff.map(person => categoryCounts.get(person.name).counts.get(label) || 0);
@@ -489,11 +489,11 @@ function render() {
         const state = stats.maximum > 0 && quantity === stats.maximum ? " product-leader" : quantity < stats.average ? " product-below" : "";
         return `<td class="number matrix-product-value${state}" title="${escapeHtml(label)}：${quantity} 个订单；人员均值 ${plainNumber(stats.average, 1)} 个订单">${quantity}</td>`;
       }).join("");
-      return `<tr><td class="matrix-fixed matrix-name"><strong>${escapeHtml(person.name)}</strong></td><td class="matrix-fixed matrix-department">${escapeHtml(person.department)}</td><td class="number matrix-order-count">${person.orderCount}</td><td class="number matrix-total-performance net-amount">${currency(person.net)}</td>${cells}</tr>`;
+      return `<tr><td class="matrix-fixed matrix-name"><strong>${escapeHtml(person.name)}</strong></td><td class="matrix-fixed matrix-department">${escapeHtml(person.department)}</td><td class="number matrix-order-count">${detail.orderCount}</td><td class="number matrix-total-performance net-amount">${currency(person.net)}</td>${cells}</tr>`;
     }).join("");
     const averages = categoryColumns.map(({ label }) => `<td class="number matrix-average-value">${plainNumber(categoryStats.get(label).average, 1)}</td>`).join("");
     const tableWidth = 480 + categoryColumns.length * 118;
-    elements.staffComparison.innerHTML = `<table class="staff-matrix-table staff-product-template-table" style="min-width:${tableWidth}px"><thead><tr><th class="matrix-fixed matrix-name">姓名</th><th class="matrix-fixed matrix-department">部门</th><th class="number">本月订单数</th><th class="number">本月总业绩</th>${headers}</tr></thead><tbody>${rows}</tbody><tfoot><tr><td class="matrix-fixed matrix-name"><strong>人员均值</strong></td><td class="matrix-fixed matrix-department"></td><td class="number">${plainNumber(analysisReport.staff.reduce((sum, person) => sum + person.orderCount, 0) / analysisReport.staff.length, 1)}</td><td class="number net-amount">${currency(analysisReport.staff.reduce((sum, person) => sum + person.net, 0) / analysisReport.staff.length)}</td>${averages}</tr></tfoot></table>`;
+    elements.staffComparison.innerHTML = `<table class="staff-matrix-table staff-product-template-table" style="min-width:${tableWidth}px"><thead><tr><th class="matrix-fixed matrix-name">姓名</th><th class="matrix-fixed matrix-department">部门</th><th class="number">本月订单数</th><th class="number">本月总业绩</th>${headers}</tr></thead><tbody>${rows}</tbody><tfoot><tr><td class="matrix-fixed matrix-name"><strong>人员均值</strong></td><td class="matrix-fixed matrix-department"></td><td class="number">${plainNumber(analysisReport.staff.reduce((sum, person) => sum + (categoryCounts.get(person.name)?.orderCount || 0), 0) / analysisReport.staff.length, 1)}</td><td class="number net-amount">${currency(analysisReport.staff.reduce((sum, person) => sum + person.net, 0) / analysisReport.staff.length)}</td>${averages}</tr></tfoot></table>`;
   } else {
     elements.staffComparison.innerHTML = '<div class="empty-state"><div class="empty-icon">人</div><strong>暂无员工数据</strong></div>';
   }
@@ -827,6 +827,8 @@ function buildGroupReport(prefix = "") {
     monthValue: 0,
     products: new Map(),
     monthProducts: new Map(),
+    productOrderKeys: new Map(),
+    monthProductOrderKeys: new Map(),
   }));
   const byNumber = new Map(groups.map(group => [group.groupNumber, group]));
   orders.forEach(order => {
@@ -857,6 +859,17 @@ function buildGroupReport(prefix = "") {
         monthItem.value += allocated;
         group.monthProducts.set(productKey, monthItem);
       }
+      if (Math.max(0, amount(product.quantity)) > 0) {
+        const category = PRODUCT_CATEGORIES.find(candidate => matchesProductCategory(candidate, product));
+        if (category) {
+          if (!group.productOrderKeys.has(category.label)) group.productOrderKeys.set(category.label, new Set());
+          group.productOrderKeys.get(category.label).add(order.orderKey);
+          if (isCurrentMonth) {
+            if (!group.monthProductOrderKeys.has(category.label)) group.monthProductOrderKeys.set(category.label, new Set());
+            group.monthProductOrderKeys.get(category.label).add(order.orderKey);
+          }
+        }
+      }
     });
   });
   const total = groups.reduce((sum, group) => sum + group.value, 0);
@@ -865,6 +878,14 @@ function buildGroupReport(prefix = "") {
   groups.forEach(group => {
     group.products = mergeProductsIntoCategories(group.products);
     group.monthProducts = mergeProductsIntoCategories(group.monthProducts);
+    PRODUCT_CATEGORIES.forEach(({ label }) => {
+      const orderCount = group.productOrderKeys.get(label)?.size || 0;
+      const monthOrderCount = group.monthProductOrderKeys.get(label)?.size || 0;
+      const product = group.products.get(label);
+      const monthProduct = group.monthProducts.get(label);
+      if (product || orderCount) group.products.set(label, { ...(product || { name: label, value: 0 }), quantity: orderCount });
+      if (monthProduct || monthOrderCount) group.monthProducts.set(label, { ...(monthProduct || { name: label, value: 0 }), quantity: monthOrderCount });
+    });
     group.productQuantity = [...group.products.values()].reduce((sum, product) => sum + product.quantity, 0);
     group.productTypes = [...group.products.values()].filter(product => product.quantity > 0).length;
     group.developmentRate = group.memberCount > 0 ? group.orders.size / group.memberCount * 100 : null;
