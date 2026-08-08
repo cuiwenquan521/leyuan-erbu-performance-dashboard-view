@@ -463,14 +463,15 @@ function render() {
   elements.staffNetAverage.textContent = currency(staffAverage);
   elements.topStaffNet.textContent = currency(topNet);
   elements.teamOrderAverage.textContent = currency(analysisReport.orderNetAverage);
-  elements.staffAnalysisPeriod.textContent = `${analysisMonth.replace("-", "年")}月完整月累计`;
+  elements.staffAnalysisPeriod.textContent = `${analysisMonth.replace("-", "年")}月完整月累计 · 产品订单：ERP订单管理（是否售后=否）`;
   if (analysisReport.staff.length) {
     const categoryColumns = PRODUCT_CATEGORIES;
+    const eligibleProductOrders = monthlyEligibleProductOrders(analysisMonth);
     const categoryCounts = new Map(analysisReport.staff.map(person => {
-      const personOrders = analysisReport.orders.filter(order => order.waiterName === person.name && order.countAsOrder);
+      const personOrders = (eligibleProductOrders || []).filter(order => order.employeeName === person.name);
       const counts = categoryColumns.map(category => {
         const { label } = category;
-        const orderNumbers = new Set(personOrders.filter(order => (order.products || []).some(product => matchesProductCategory(category, product))).map(order => order.orderNumber));
+        const orderNumbers = new Set(personOrders.filter(order => (order.products || []).some(product => matchesProductCategory(category, product))).map(order => order.orderKey));
         return [label, orderNumbers.size];
       });
       return [person.name, { counts: new Map(counts) }];
@@ -479,7 +480,7 @@ function render() {
       const values = analysisReport.staff.map(person => categoryCounts.get(person.name).counts.get(label) || 0);
       return [label, { average: values.reduce((sum, value) => sum + value, 0) / values.length, maximum: Math.max(...values) }];
     }));
-    const headers = categoryColumns.map(({ label, hint }) => `<th class="matrix-product-head"><span>${escapeHtml(label)}</span><span class="matrix-info" title="按订单号去重；包含：${escapeHtml(hint)}" aria-label="${escapeHtml(label)}匹配规则">!</span></th>`).join("");
+    const headers = categoryColumns.map(({ label, hint }) => `<th class="matrix-product-head"><span>${escapeHtml(label)}</span><span class="matrix-info" title="ERP订单管理·是否售后=否·按订单号去重；包含：${escapeHtml(hint)}" aria-label="${escapeHtml(label)}匹配规则">!</span></th>`).join("");
     const rows = analysisReport.staff.map(person => {
       const detail = categoryCounts.get(person.name);
       const cells = categoryColumns.map(({ label }) => {
